@@ -43,19 +43,25 @@ SMART enhances the problem-solving capabilities of language models by breaking d
 - Supports multiple languages for video transcripts.
 
 **Installation**
-To install these tools, simply copy the code into a new tool inside (OpenWeb UI)[https://www.openwebui.com].
+
+To install these tools, simply copy the code into a new tool inside [OpenWeb UI](https://www.openwebui.com).
 
 **Usage**
+
 Each tool can be imported and used in your OpenWebUI projects. Refer to the individual tool files for specific usage instructions and required API keys.
 
 ## Project Info
 
 **Contributing**
+
 Contributions to OpenWebUI-Tools are welcome! Please feel free to submit pull requests or open issues for any improvements or bug fixes.
 
 **License**
+
 Licensed under the MIT License. 
 
 **Authors**
-MartainInGreen (https://github.com/MartianInGreen)
-If you want to support me check my (GitHub Profile)[https://github.com/MartianInGreen] for more info. (Buy Me a Coffee)[https://rennersh.de/buy-me-a-coffee/]
+
+[MartainInGreen](https://github.com/MartianInGreen)
+
+If you want to support me check my [GitHub Profile](https://github.com/MartianInGreen) for more info. [Buy Me a Coffee](https://rennersh.de/buy-me-a-coffee/)
