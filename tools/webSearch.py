@@ -6,11 +6,11 @@ version: 0.1.0
 """
 
 import urllib, requests, os, json, time, re
-from dotenv import load_dotenv
+from dotenv import load_dotenv #type: ignore
 
 # Prettier #print
 from rich import print
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field #type: ignore
 from typing import Callable, Awaitable
 
 

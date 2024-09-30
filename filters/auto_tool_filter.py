@@ -7,18 +7,18 @@ version: 0.1.8
 required_open_webui_version: 0.3.8
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field #type: ignore
 from typing import Callable, Awaitable, Any, Optional, Literal
 import json
 import re
 
-from open_webui.apps.webui.models.users import Users
-from open_webui.apps.webui.models.tools import Tools
-from open_webui.apps.webui.models.models import Models
+from open_webui.apps.webui.models.users import Users #type: ignore
+from open_webui.apps.webui.models.tools import Tools #type: ignore
+from open_webui.apps.webui.models.models import Models #type: ignore
 
 
-from open_webui.main import generate_chat_completions
-from open_webui.utils.misc import get_last_user_message
+from open_webui.main import generate_chat_completions #type: ignore
+from open_webui.utils.misc import get_last_user_message #type: ignore
 
 
 class Filter:
