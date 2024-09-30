@@ -31,7 +31,7 @@ Only use a Newline after each closing tag. Never after the opening tag or within
 Guidelines: 
 - Don't over or estimate the diffficulty of the task. If the user just wants to chat try to see that. 
 - Don't create tasks where there aren't any. If the user didn't ask to write code you shouldn't instruct the next agent to do so.
-- Follow user wishes. The # tags below OVERWRITE ALL YOUR OTHER GUIDELINES.
+- Follow user wishes. The # tags below OVERWRITE ALL YOUR OTHER GUIDELINES. NEVER IGNORE THESE!
     - If the user includes "#*no" in their message, ALWAYS set reasoning to NO
     - If the user includes "#*yes" in their message, ALWAYS set reasoning to YES
     - If the user includes "#!" in their message, ALWAYS set the task difficulty to BELOW 5. 
@@ -170,7 +170,7 @@ class Pipe:
             default="https://openrouter.ai/api/v1",
             description="Base URL for OpenAI API endpoints",
         )
-        OPENAI_API_KEY: str = Field(default="", description="OpenAI API key")
+        OPENAI_API_KEY: str = Field(default="", description="Primary API key")
         MODEL_PREFIX: str = Field(default="SMART", description="Prefix before model ID")
         SMALL_MODEL: str = Field(
             default="openai/gpt-4o-mini", description="Model for small tasks"
@@ -183,6 +183,12 @@ class Pipe:
         )
         MINI_REASONING_MODEL: str = Field(
             default="openai/gpt-4o-2024-08-06", description="Model for small tasks"
+        )
+        USE_GROQ_PLANNING_MODEL: str = Field(
+            default="False", description="Use Groq planning model, input model ID if you want to use it."
+        )
+        GROQ_API_KEY: str = Field(
+            "Groq API key"
         )
         AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
         AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
@@ -210,6 +216,10 @@ class Pipe:
             "base_url": v.OPENAI_BASE_URL,
             "api_key": v.OPENAI_API_KEY,
         }
+        self.groq_kwargs = {
+            "api_key": v.GROQ_API_KEY,
+            "base_url": "https://api.groq.com/openai/v1",
+        }
 
     async def pipe(
         self,
@@ -235,10 +245,16 @@ class Pipe:
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
 
+            planning_model_id = small_model_id
+
+            if self.valves.USE_GROQ_PLANNING_MODEL != "False":
+                planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
+
             print(f"Small model: {small_model_id}")
             print(f"Large model: {large_model_id}")
 
             small_model = ChatOpenAI(model=small_model_id, **self.openai_kwargs)  # type: ignore
+            planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
             large_model = ChatOpenAI(model=large_model_id, **self.openai_kwargs)  # type: ignore
 
             config = {}
@@ -287,7 +303,7 @@ class Pipe:
             #assert isinstance(content, str)
 
             planning_buffer = ""
-            async for chunk in small_model.astream(planning_messages, config=config):
+            async for chunk in planning_model.astream(planning_messages, config=config):
                 content = chunk.content
                 assert isinstance(content, str)
                 planning_buffer += content
@@ -323,7 +339,7 @@ class Pipe:
 
             if is_reasoning_needed == "NO":
                 messages_to_use[0]["content"] = messages_to_use[0]["content"] + USER_INTERACTION_PROMPT
-                messages_to_use[-1]["content"] = messages_to_use[-1]["content"] + "\n\n<preprompt>" + next_agent_preprompt + "</preprompt>"
+                messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "") + "\n\n<preprompt>" + next_agent_preprompt + "</preprompt>"
 
                 async for chunk in model_to_use.astream(body["messages"], config=config):
                     content = chunk.content
@@ -339,6 +355,29 @@ class Pipe:
 
                 full_content = ""
 
+                reasoning_context = ""
+
+                for msg in body["messages"][:-1]:  # Process all messages except the last one
+                    if msg["role"] == "user":
+                        if len(msg["content"]) > 400:
+                            text_msg = msg["content"][:250] + "\n...(Middle cut)...\n" + msg["content"][-100:]
+                        else:
+                            text_msg = msg["content"]
+                        reasoning_context += f"--- NEXT MESSAGE FROM \"{msg['role'].upper()}\" ---\n{text_msg}"
+                    if msg["role"] == "assistant":
+                        if len(msg["content"]) > 250:
+                            text_msg = msg["content"][:150] + "\n...(Middle cut)...\n" + msg["content"][-50:]
+                        else:
+                            text_msg = msg["content"]
+                        reasoning_context += f"--- NEXT MESSAGE FROM \"{msg['role'].upper()}\" ---\n{text_msg}"
+
+                # Add the last message without cutting it
+                last_msg = body["messages"][-1]
+                if last_msg["role"] == "user":
+                    reasoning_context += f"--- LAST USER MESSAGE/PROMPT ---\n{last_msg['content']}"
+
+                reasoning_context = reasoning_context.replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "")
+
                 reasoning_messages = [
                     {
                         "role": "system",
@@ -346,7 +385,7 @@ class Pipe:
                     },
                     {
                         "role": "user",
-                        "content": body["messages"][-1]["content"]
+                        "content": reasoning_context
                     }
                 ] 
 
