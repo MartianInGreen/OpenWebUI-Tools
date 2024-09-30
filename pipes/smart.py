@@ -251,16 +251,20 @@ class Pipe:
             planning_model_id = small_model_id
 
             if self.valves.USE_GROQ_PLANNING_MODEL != "False":
-                if self.valves.ONLY_USE_GROQ_FOR_MINI and mini_mode:
-                    planning_model_id = self.valves.MINI_REASONING_MODEL
-                else:
+                if self.valves.ONLY_USE_GROQ_FOR_MINI == True and mini_mode == True:
                     planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
+                    planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
+                elif self.valves.ONLY_USE_GROQ_FOR_MINI == False:
+                    planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
+                    planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
+                else:
+                    planning_model_id = self.valves.SMALL_MODEL
+                    planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
 
             print(f"Small model: {small_model_id}")
             print(f"Large model: {large_model_id}")
 
             small_model = ChatOpenAI(model=small_model_id, **self.openai_kwargs)  # type: ignore
-            planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
             large_model = ChatOpenAI(model=large_model_id, **self.openai_kwargs)  # type: ignore
 
             config = {}
