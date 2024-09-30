@@ -102,7 +102,7 @@ You are the tool-use agent of an agent chain. You are the part of the llm design
 You will not directly interact with the user in any way. Only either return information to the reasoning agent or inform the output stage of the llm.
 
 When you have used a tool. You can return the results to the reasoning agent by putting everything you want to return to them within <tool_to_reasoning> tags.
-You can also directly pass the results to the final-agent by simply writing $TO_FINAL$. All tool results you got wil then get passed along to the final-agent.
+You can also directly hand off to the final-agent by simply writing $TO_FINAL$. 
 
 Actually make use of the results you got. NEVER make more than 3 tool calls! If you called any tool 3 times that's it!
 You need to output everything you want to pass on. The next agent in the chain will only see whay you actually wrote, not the direct output of the tools!
@@ -274,8 +274,15 @@ class Pipe:
                         status_message="Planning...",
                         done=False,
                     )
-            content = small_model.invoke(planning_messages, config=config).content
-            assert isinstance(content, str)
+            #content = small_model.invoke(planning_messages, config=config).content
+            #assert isinstance(content, str)
+
+            planning_buffer = ""
+            async for chunk in small_model.astream(planning_messages, config=config):
+                content = chunk.content
+                assert isinstance(content, str)
+                planning_buffer += content
+            content = planning_buffer
             
             # Get the planning result from the xml tags
             task_difficulty = re.findall(r"<task_difficulty>(.*?)</task_difficulty>", content)
@@ -335,8 +342,31 @@ class Pipe:
                         status_message="Reasoning...",
                         done=False,
                     )
-                reasoning_content = reasoning_model.invoke(reasoning_messages, config=config).content
-                assert isinstance(content, str)
+                #reasoning_content = reasoning_model.invoke(reasoning_messages, config=config).content
+                #assert isinstance(content, str)
+
+                reasoning_bufffer = ""
+                update_status = 0
+                async for chunk in reasoning_model.astream(reasoning_messages, config=config):
+                    content = chunk.content
+                    assert isinstance(content, str)
+                    reasoning_bufffer += content
+                    update_status += 1
+
+                    if update_status >= 5:
+                        update_status = 0 
+                        await send_status(
+                            status_message=f"Reasoning ({len(reasoning_bufffer)})... {reasoning_bufffer[-100:]}",
+                            done=False,
+                        )
+
+                await send_status(
+                            status_message=f"Reasoning ({len(reasoning_bufffer)})... done",
+                            done=True,
+                        )
+
+                reasoning_content = reasoning_bufffer
+
                 full_content += "<reasoning_agent_output>\n" + reasoning_content + "\n<reasoning_agent_output>"
 
                 await send_citation(
