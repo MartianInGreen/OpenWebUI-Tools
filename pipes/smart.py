@@ -61,7 +61,7 @@ Example resonse:
 </reasoning>
 <task_difficulty>5</task_difficulty>
 <is_reasoning_or_tool_needed>YES</is_reasoning_or_tool_needed>
-<next_agent_preprompt>...</next_agent_preprompt>
+<next_agent_preprompt>...</next_agent_preprompt> # YOU STOP AFTER </next_agent_preprompt>!
 </system_instructions>"""
 
 REASONING_PROMPT = """<system_instructions>
@@ -258,8 +258,9 @@ class Pipe:
                     planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
                     planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
                 else:
-                    planning_model_id = self.valves.SMALL_MODEL
                     planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
+            else:
+                planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
 
             print(f"Small model: {small_model_id}")
             print(f"Large model: {large_model_id}")
