@@ -153,13 +153,13 @@ class Pipe:
             default="openai/gpt-4o-mini", description="Model for small tasks"
         )
         LARGE_MODEL: str = Field(
-            default="openai/gpt-4o", description="Model for large tasks"
+            default="openai/gpt-4o-2024-08-06", description="Model for large tasks"
         )
         REASONING_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet"
         )
-        AGENT_NAME: str = Field(default="Smart/OpenAI", description="Name of the agent")
-        AGENT_ID: str = Field(default="smart-openai", description="IDx of the agent")
+        AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
+        AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
 
     def __init__(self):
         self.type = "manifold"
@@ -246,8 +246,6 @@ class Pipe:
         })
 
         print(f"{planning_messages=}")
-
-        yield ""
 
         await send_status(
                     status_message="Planning...",
@@ -338,5 +336,3 @@ class Pipe:
         else:
             yield "Error: is_reasoning_needed is not YES or NO"
             return
-        
-        return
