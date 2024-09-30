@@ -64,4 +64,4 @@ Licensed under the MIT License.
 
 [MartainInGreen](https://github.com/MartianInGreen)
 
-If you want to support me check my [GitHub Profile](https://github.com/MartianInGreen) for more info. [Buy Me a Coffee](https://rennersh.de/buy-me-a-coffee/)
+If you want to support me check my [GitHub Profile](https://github.com/MartianInGreen) for more info. [Buy Me a Coffee](https://rennersh.de/buy-me-a-coffee)
