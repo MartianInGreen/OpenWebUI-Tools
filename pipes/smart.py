@@ -103,7 +103,7 @@ You are the tool-use agent of an agent chain. You are the part of the llm design
 You will not directly interact with the user in any way. Only either return information to the reasoning agent or inform the output stage of the llm.
 
 When you have used a tool. You can return the results to the reasoning agent by putting everything you want to return to them within <tool_to_reasoning> tags.
-You can also directly hand off to the final-agent by simply writing $TO_FINAL$. 
+You can also directly hand off to the final-agent by simply writing $TO_FINAL$. You still need to write out what you want them to get!
 
 Actually make use of the results you got. NEVER make more than 3 tool calls! If you called any tool 3 times that's it!
 You need to output everything you want to pass on. The next agent in the chain will only see whay you actually wrote, not the direct output of the tools!
@@ -181,6 +181,9 @@ class Pipe:
         REASONING_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet"
         )
+        MINI_REASONING_MODEL: str = Field(
+            default="openai/gpt-4o-2024-08-06", description="Model for small tasks"
+        )
         AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
         AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
 
@@ -197,7 +200,7 @@ class Pipe:
         except Exception as e:
             return [{"id": "error", "name": f"Error: {e}"}]
 
-        return [{"id": self.valves.AGENT_ID, "name": self.valves.AGENT_NAME}]
+        return [{"id": self.valves.AGENT_ID, "name": self.valves.AGENT_NAME}, {"id": self.valves.AGENT_ID + "-mini", "name": self.valves.AGENT_NAME + "-mini"}]
 
     def setup(self):
         v = self.valves
@@ -223,6 +226,11 @@ class Pipe:
                 return
 
             self.setup()
+
+            called_model_id = body["model"]
+            mini_mode = False
+            if called_model_id.endswith("-mini"):
+                mini_mode = True
 
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
@@ -324,6 +332,9 @@ class Pipe:
                 return 
             elif is_reasoning_needed == "YES": 
                 reasoning_model_id = self.valves.REASONING_MODEL
+                if mini_mode == True:
+                    reasoning_model_id = self.valves.MINI_REASONING_MODEL
+
                 reasoning_model = ChatOpenAI(model=reasoning_model_id, **self.openai_kwargs)  # type: ignore
 
                 full_content = ""
