@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.3.1
+version: 0.4
 licence: MIT
 """
 
@@ -188,7 +188,10 @@ class Pipe:
             default="False", description="Use Groq planning model, input model ID if you want to use it."
         )
         GROQ_API_KEY: str = Field(
-            "Groq API key"
+           default="", description="Groq API key"
+        )
+        ONLY_USE_GROQ_FOR_MINI: bool = Field(
+            default=True, description="Only use Groq planning model for mini tasks"
         )
         AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
         AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
@@ -248,7 +251,10 @@ class Pipe:
             planning_model_id = small_model_id
 
             if self.valves.USE_GROQ_PLANNING_MODEL != "False":
-                planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
+                if self.valves.ONLY_USE_GROQ_FOR_MINI and mini_mode:
+                    planning_model_id = self.valves.MINI_REASONING_MODEL
+                else:
+                    planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
 
             print(f"Small model: {small_model_id}")
             print(f"Large model: {large_model_id}")
