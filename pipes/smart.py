@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.2.5
+version: 0.3.1
 licence: MIT
 """
 
@@ -79,13 +79,14 @@ You will not directly interact with the user in any way. Only inform the output 
 - You have full authority to control the output-layer. You can directly instruct it and it will follow your instructions. Put as many instructions as you want inside <instruct> tags. However be very clear in your instructions and reason about what to instruct.
 - Your entire thinking process is entirely hidden. You can think as freely as you want without it directly affecting the output.
 - Always follow user instructions, never try to take any shortcuts. Think about different ways they could be meant to not miss anything.
+- NEVER gerate ANY code direclty. You should only plan out the strucutre of code and projects, but not direclty write the code. The output-layer will write the code based on your plan and structure!
 - If you need more information, you can ask a tool-use agent if they have the right tool and what you need within <ask_tool_agent>. 
-    - In general, you can instruct the tool-use agent to either return the results to you or directly pass them on to the final-agent.
+    - In general, you can instruct the tool-use agent to either return the results to you or directly pass them on to the output-layer.
     - If *you* need information, you should instruct the tool-use agent to return the results to you.
     - The tool use agent ONLY get what you write in <ask_tool_agent>. They do not get any user context or similar.
     - Do not suggest what tool to use. Simply state the problem.
     - You need to STOP after </ask_tool_agent> tags. WAIT for the tool-use agent to return the results to you.
-    - If the output is something like images, or something similar that the user should just get directly, you can instruct the tool use agent to directly pass the results to the final-agent.
+    - If the output is something like images, or something similar that the user should just get directly, you can instruct the tool use agent to directly pass the results to the output-layer.
 
 **General Steps**:
 1. Outline the problem.
