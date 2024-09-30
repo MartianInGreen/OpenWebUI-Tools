@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.4
+version: 0.5
 licence: MIT
 """
 
@@ -24,12 +24,12 @@ from langgraph.prebuilt import create_react_agent # type: ignore
 PLANNING_PROMPT = """<system_instructions>
 You are a planning Agent. You are part of an agent chain designed to make LLMs more capable. 
 You are responsible for taking the incoming user input/request and preparing it for the next agents in the chain.
-After you will come a reasoning and tool use agent. These agent can go back and forth between each other until they have come up with a solution. 
+After you will come a reasoning and tool use agent. These agents can go back and forth between each other until they have come up with a solution. 
 After they have come up with a solution, a final agent will be used to summarize the reasoning and provide a final answer.
 Only use a Newline after each closing tag. Never after the opening tag or within the tags.
 
 Guidelines: 
-- Don't over or estimate the diffficulty of the task. If the user just wants to chat try to see that. 
+- Don't over or estimate the difficulty of the task. If the user just wants to chat try to see that. 
 - Don't create tasks where there aren't any. If the user didn't ask to write code you shouldn't instruct the next agent to do so.
 - Follow user wishes. The # tags below OVERWRITE ALL YOUR OTHER GUIDELINES. NEVER IGNORE THESE!
     - If the user includes "#*no" in their message, ALWAYS set reasoning to NO
@@ -40,58 +40,53 @@ Guidelines:
 You should respond by following these steps:
 1. Within <reasoning> tags, plan what you will write in the other tags. This has to be your first step.
     1. First, reason about the task difficulty. What kind of task is it? What do your guidelines say about that?
-    2. Second, reason about if the if reasoning and tool use agent is needed. What do your guidelines say about that?
+    2. Second, reason about if the reasoning and tool use agent is needed. What do your guidelines say about that?
     3. Third, think about what should be contained in your prompt. Don't write the prompt here already. Just think about what should be in it.
 2. Within <task_difficulty> tags, write a number between 1 and 10 to indicate how difficult you think the task is. 1 being the easiest and 10 being the hardest. 
-    1. If you choose a number above or equal to 5, a bigger model will be used for the final answer. This is good for for example creative tasks but bad for summarization etc. because the cost will be higher.
-3. Within <is_reasoning_or_tool_needed> tags, write YES or NO. This will determine if the user request will go strait to the final agent or if it will go to the reasoning and tool use agent.
-   1. Remember that some task which seem easy might still be better to go through the reasoning and tool use agent.
+    1. If you choose a number above or equal to 5, a bigger model will be used for the final answer. This is good for example creative tasks but bad for summarization etc. because the cost will be higher.
+3. Within <is_reasoning_or_tool_needed> tags, write YES or NO. This will determine if the user request will go straight to the final agent or if it will go to the reasoning and tool use agent.
+   1. Remember that some tasks which seem easy might still be better to go through the reasoning and tool use agent.
    2. Try to reason if LLMs are good at solving the problem or if they usually struggle with that task.
-   3. Categories of problems that you HAVE TO answer YES to: Any Counting task (Numbers, Letters...), Math, Programming, Logic, Problem Solving, Analysis (even simple one), Trick Questions, Puzzles, Proof Reading, Text Editing, Fact Checking, Reasearch, ...
-   4. Categories of problems that you HAVE TO answer NO to: Writing, Summarizing (text, website, etc.), Translation, Simple Conversation, Simple Clarefication, ...
-4. Within <next_agent_preprompt> tags, write a prompt for the next agent in the chain.
-   1. This prompt should prime the next agent to think about the problem in a way that will help them come up with a solution.
-   2. You should not give any information that is already contained in the user input. You do not need to repeat the question, just give the agent a role.
-   3. You should give the next agent a role, such as "You are a world class programmer designed to help the user write very good python code"
+   3. Categories of problems that you HAVE TO answer YES to: Any Counting task (Numbers, Letters...), Math, Programming, Logic, Problem Solving, Analysis (even simple one), Trick Questions, Puzzles, Proof Reading, Text Editing, Fact Checking, Research, ...
+   4. Categories of problems that you HAVE TO answer NO to: Writing, Spelling, Summarizing (text, website, etc.), Translation, Simple Conversation, Simple Clarification, ...
 
-Example resonse:
+Example response:
 <reasoning>
 ... 
 (You are allowed new lines here)
 </reasoning>
 <task_difficulty>5</task_difficulty>
 <is_reasoning_or_tool_needed>YES</is_reasoning_or_tool_needed>
-<next_agent_preprompt>...</next_agent_preprompt> # YOU STOP AFTER </next_agent_preprompt>!
 </system_instructions>"""
 
 REASONING_PROMPT = """<system_instructions>
-You are a reasoning layer of an LLM. You are the part of the llm designed for internal thought, planning, and thinking. 
-You will not directly interact with the user in any way. Only inform the output stage of the llm what to say by your entire output being parts of it's context when it's starts to generate a response. 
+You are a reasoning layer of an LLM. You are part of the LLM designed for internal thought, planning, and thinking. 
+You will not directly interact with the user in any way. Only inform the output stage of the LLM what to say by your entire output being parts of its context when it starts to generate a response. 
 
 **General rules**:
 - Write out your entire reasoning process between <thinking> tags.
-- Do not use any formatting whatsoever. The only form of special formatting you're allowed to use is latex for mathematical expressions.
+- Do not use any formatting whatsoever. The only form of special formatting you're allowed to use is LaTeX for mathematical expressions.
 - You MUST think in the smallest steps possible. Where every step is only a few words long. Each new thought should be a new line.
 - You MUST try to catch your own mistakes by constantly thinking about what you have thought about so far.
-- You MUST break down every problem into very small steps and go though them one by one.
+- You MUST break down every problem into very small steps and go through them one by one.
 - You MUST never come up with an answer first. Always reason about the answer first. Even if you think the answer is obvious.
 - You MUST provide exact answers.
-- You have full authority to control the output-layer. You can directly instruct it and it will follow your instructions. Put as many instructions as you want inside <instruct> tags. However be very clear in your instructions and reason about what to instruct.
+- You have full authority to control the output layer. You can directly instruct it and it will follow your instructions. Put as many instructions as you want inside <instruct> tags. However, be very clear in your instructions and reason about what to instruct.
 - Your entire thinking process is entirely hidden. You can think as freely as you want without it directly affecting the output.
 - Always follow user instructions, never try to take any shortcuts. Think about different ways they could be meant to not miss anything.
-- NEVER gerate ANY code direclty. You should only plan out the strucutre of code and projects, but not direclty write the code. The output-layer will write the code based on your plan and structure!
+- NEVER generate ANY code directly. You should only plan out the structure of code and projects, but not directly write the code. The output layer will write the code based on your plan and structure!
 - If you need more information, you can ask a tool-use agent if they have the right tool and what you need within <ask_tool_agent>. 
-    - In general, you can instruct the tool-use agent to either return the results to you or directly pass them on to the output-layer.
+    - In general, you can instruct the tool-use agent to either return the results to you or directly pass them on to the output layer.
     - If *you* need information, you should instruct the tool-use agent to return the results to you.
-    - The tool use agent ONLY get what you write in <ask_tool_agent>. They do not get any user context or similar.
+    - The tool use agent ONLY gets what you write in <ask_tool_agent>. They do not get any user context or similar.
     - Do not suggest what tool to use. Simply state the problem.
     - You need to STOP after </ask_tool_agent> tags. WAIT for the tool-use agent to return the results to you.
-    - If the output is something like images, or something similar that the user should just get directly, you can instruct the tool use agent to directly pass the results to the output-layer.
+    - If the output is something like images, or something similar that the user should just get directly, you can instruct the tool use agent to directly pass the results to the output layer.
 
 **General Steps**:
 1. Outline the problem.
 2. Think about what kind of problem this is.
-3. Break down the problem into the smallest possible problems, never take shortcuts on reasoning, counting etc. Everything needs to be explicitly stated. More output is more better.
+3. Break down the problem into the smallest possible problems, never take shortcuts on reasoning, counting etc. Everything needs to be explicitly stated. More output is better.
 4. Think about steps you might need to take to solve this problem.
 5. Think through these steps.
 6. Backtrack and restart from different points as often as you need to. Always consider alternative approaches.
@@ -99,16 +94,16 @@ You will not directly interact with the user in any way. Only inform the output 
 </system_instructions>"""
 
 TOOL_PROMPT = """<system_instructions>
-You are the tool-use agent of an agent chain. You are the part of the llm designed to use tools.
-You will not directly interact with the user in any way. Only either return information to the reasoning agent or inform the output stage of the llm.
+You are the tool-use agent of an agent chain. You are the part of the LLM designed to use tools.
+You will not directly interact with the user in any way. Only either return information to the reasoning agent or inform the output stage of the LLM.
 
-When you have used a tool. You can return the results to the reasoning agent by putting everything you want to return to them within <tool_to_reasoning> tags.
-You can also directly hand off to the final-agent by simply writing $TO_FINAL$. You still need to write out what you want them to get!
+When you have used a tool, you can return the results to the reasoning agent by putting everything you want to return to them within <tool_to_reasoning> tags.
+You can also directly hand off to the final agent by simply writing $TO_FINAL$. You still need to write out what you want them to get!
 
-Actually make use of the results you got. NEVER make more than 3 tool calls! If you called any tool 3 times that's it!
-You need to output everything you want to pass on. The next agent in the chain will only see whay you actually wrote, not the direct output of the tools!
+Actually make use of the results you got. NEVER make more than 3 tool calls! If you called any tool 3 times, that's it!
+You need to output everything you want to pass on. The next agent in the chain will only see what you actually wrote, not the direct output of the tools!
 
-Please think about how best to call the tool first. Think about what the limitations of the tools are and how to best follow the reasoning-agent instructions. It's okay if you can't 100% produce what they wanted!
+Please think about how best to call the tool first. Think about what the limitations of the tools are and how to best follow the reasoning agent's instructions. It's okay if you can't 100% produce what they wanted!
 </system_instructions>"""
 
 USER_INTERACTION_PROMPT = """<system_instructions>
@@ -223,7 +218,7 @@ class Pipe:
             "api_key": v.GROQ_API_KEY,
             "base_url": "https://api.groq.com/openai/v1",
         }
-
+    
     async def pipe(
         self,
         body: dict,
@@ -238,7 +233,7 @@ class Pipe:
             if __task__ == "function_calling":
                 return
 
-            self.setup()
+            self.setup()   
 
             called_model_id = body["model"]
             mini_mode = False
@@ -327,9 +322,6 @@ class Pipe:
             is_reasoning_needed = re.findall(r"<is_reasoning_or_tool_needed>(.*?)</is_reasoning_or_tool_needed>", content)
             is_reasoning_needed = is_reasoning_needed[0] if is_reasoning_needed else "unknown"
 
-            next_agent_preprompt = re.findall(r"<next_agent_preprompt>(.*?)</next_agent_preprompt>", content)
-            next_agent_preprompt = next_agent_preprompt[0] if next_agent_preprompt else "unknown"
-
             model_to_use_id = small_model_id
             if float(task_difficulty) >= 5:
                 model_to_use_id = large_model_id
@@ -344,18 +336,61 @@ class Pipe:
                         content=f"{content=}",
                     )
 
+            # Try to find #!, #!!, #*yes, #*no, in the user message, let them overwrite the model choice
+            if "#!" in body["messages"][-1]["content"]:
+                model_to_use_id = small_model_id
+            elif"#!!" in body["messages"][-1]["content"]:
+                model_to_use_id = large_model_id
+            if "#*yes" in body["messages"][-1]["content"]:
+                is_reasoning_needed = "YES"
+            elif "#*no" in body["messages"][-1]["content"]:
+                is_reasoning_needed = "NO"
+
+            tools = []
+            for key, value in __tools__.items():
+                tools.append(
+                    StructuredTool(
+                        func=None,
+                        name=key,
+                        coroutine=value["callable"],
+                        args_schema=value["pydantic_model"],
+                        description=value["spec"]["description"],
+                    )
+                )
+
             model_to_use = ChatOpenAI(model=model_to_use_id, **self.openai_kwargs)  # type: ignore
 
             messages_to_use = body["messages"]
 
             if is_reasoning_needed == "NO":
                 messages_to_use[0]["content"] = messages_to_use[0]["content"] + USER_INTERACTION_PROMPT
-                messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "") + "\n\n<preprompt>" + next_agent_preprompt + "</preprompt>"
+                messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "")
 
-                async for chunk in model_to_use.astream(body["messages"], config=config):
-                    content = chunk.content
-                    assert isinstance(content, str)
-                    yield content
+                graph = create_react_agent(model_to_use, tools=tools)
+                inputs = {"messages": body["messages"]}
+
+                num_tool_calls = 0
+                async for event in graph.astream_events(inputs, version="v2", config=config):
+                    if num_tool_calls >= 4:
+                        break
+                    kind = event["event"]
+                    data = event["data"]
+                    if kind == "on_chat_model_stream":
+                        if "chunk" in data and (content := data["chunk"].content):
+                            yield content
+                    elif kind == "on_tool_start":
+                        yield "\n"
+                        await send_status(f"Running tool {event['name']}", False)
+                    elif kind == "on_tool_end":
+                        num_tool_calls += 1
+                        await send_status(
+                            f"Tool '{event['name']}' returned {data.get('output')}", True
+                        )
+                        await send_citation(
+                            url=f"Tool call {num_tool_calls}",
+                            title=event["name"],
+                            content=f"Tool '{event['name']}' with inputs {data.get('input')} returned {data.get('output')}",
+                        )
                 return 
             elif is_reasoning_needed == "YES": 
                 reasoning_model_id = self.valves.REASONING_MODEL
@@ -458,17 +493,6 @@ class Pipe:
                     if not __tools__:
                         tool_agent_response = "Tool agent could not use any tools because the user did not enable any."
                     else:
-                        tools = []
-                        for key, value in __tools__.items():
-                            tools.append(
-                                StructuredTool(
-                                    func=None,
-                                    name=key,
-                                    coroutine=value["callable"],
-                                    args_schema=value["pydantic_model"],
-                                    description=value["spec"]["description"],
-                                )
-                            )
                         graph = create_react_agent(large_model, tools=tools)
                         inputs = {"messages": tool_message}
                         message_buffer = ""
@@ -515,10 +539,32 @@ class Pipe:
                 messages_to_use[0]["content"] = messages_to_use[0]["content"] + USER_INTERACTION_PROMPT
                 #messages_to_use[-1]["content"] = messages_to_use[-1]["content"] + "\n\n<preprompt>" + next_agent_preprompt + "</preprompt>"
 
-                async for chunk in model_to_use.astream(messages_to_use, config=config):
-                    content = chunk.content
-                    assert isinstance(content, str)
-                    yield content
+                graph = create_react_agent(model_to_use, tools=tools)
+                inputs = {"messages": messages_to_use}
+
+                num_tool_calls = 0
+                async for event in graph.astream_events(inputs, version="v2", config=config):
+                    if num_tool_calls >= 4:
+                        break
+                    num_tool_calls += 1
+                    kind = event["event"]
+                    data = event["data"]
+                    if kind == "on_chat_model_stream":
+                        if "chunk" in data and (content := data["chunk"].content):
+                            yield content
+                    elif kind == "on_tool_start":
+                        yield "\n"
+                        await send_status(f"Running tool {event['name']}", False)
+                    elif kind == "on_tool_end":
+                        num_tool_calls += 1
+                        await send_status(
+                            f"Tool '{event['name']}' returned {data.get('output')}", True
+                        )
+                        await send_citation(
+                            url=f"Tool call {num_tool_calls}",
+                            title=event["name"],
+                            content=f"Tool '{event['name']}' with inputs {data.get('input')} returned {data.get('output')}",
+                        )
                 return
 
             else:
