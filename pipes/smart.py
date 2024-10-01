@@ -341,9 +341,9 @@ class Pipe:
                 model_to_use_id = small_model_id
             elif"#!!" in body["messages"][-1]["content"]:
                 model_to_use_id = large_model_id
-            if "#*yes" in body["messages"][-1]["content"]:
+            if "#*yes" in body["messages"][-1]["content"] or "#yes" in body["messages"][-1]["content"]:
                 is_reasoning_needed = "YES"
-            elif "#*no" in body["messages"][-1]["content"]:
+            elif "#*no" in body["messages"][-1]["content"] or "#no" in body["messages"][-1]["content"]:
                 is_reasoning_needed = "NO"
 
             tools = []
@@ -542,11 +542,19 @@ class Pipe:
                 graph = create_react_agent(model_to_use, tools=tools)
                 inputs = {"messages": messages_to_use}
 
+                await send_status(
+                        status_message=f"Starting answer with {model_to_use_id}...",
+                        done=False,
+                    )
+
                 num_tool_calls = 0
-                async for event in graph.astream_events(inputs, version="v2", config=config):
+                async for event in graph.astream_events(inputs, version="v2", config=config):  # type: ignore
                     if num_tool_calls >= 4:
+                        await send_status(
+                            status_message="Interupting due to max tool calls reached!",
+                            done=True,
+                        )
                         break
-                    num_tool_calls += 1
                     kind = event["event"]
                     data = event["data"]
                     if kind == "on_chat_model_stream":
@@ -565,6 +573,12 @@ class Pipe:
                             title=event["name"],
                             content=f"Tool '{event['name']}' with inputs {data.get('input')} returned {data.get('output')}",
                         )
+
+                if not num_tool_calls >= 4:
+                    await send_status(
+                        status_message="Done!",
+                        done=True,
+                    )
                 return
 
             else:
