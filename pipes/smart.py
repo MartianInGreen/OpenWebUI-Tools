@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.5
+version: 0.6
 licence: MIT
 """
 
@@ -31,32 +31,30 @@ Only use a Newline after each closing tag. Never after the opening tag or within
 Guidelines: 
 - Don't over or estimate the difficulty of the task. If the user just wants to chat try to see that. 
 - Don't create tasks where there aren't any. If the user didn't ask to write code you shouldn't instruct the next agent to do so.
-- Follow user wishes. The # tags below OVERWRITE ALL YOUR OTHER GUIDELINES. NEVER IGNORE THESE!
-    - If the user includes "#*no" in their message, ALWAYS set reasoning to NO
-    - If the user includes "#*yes" in their message, ALWAYS set reasoning to YES
-    - If the user includes "#!" in their message, ALWAYS set the task difficulty to BELOW 5. 
-    - If the user includes "#!!" in their message, ALWAYS set the task difficulty to EQUAL OR ABOVE 5.
 
 You should respond by following these steps:
 1. Within <reasoning> tags, plan what you will write in the other tags. This has to be your first step.
     1. First, reason about the task difficulty. What kind of task is it? What do your guidelines say about that?
     2. Second, reason about if the reasoning and tool use agent is needed. What do your guidelines say about that?
     3. Third, think about what should be contained in your prompt. Don't write the prompt here already. Just think about what should be in it.
-2. Within <task_difficulty> tags, write a number between 1 and 10 to indicate how difficult you think the task is. 1 being the easiest and 10 being the hardest. 
-    1. If you choose a number above or equal to 5, a bigger model will be used for the final answer. This is good for example creative tasks but bad for summarization etc. because the cost will be higher.
-3. Within <is_reasoning_or_tool_needed> tags, write YES or NO. This will determine if the user request will go straight to the final agent or if it will go to the reasoning and tool use agent.
-   1. Remember that some tasks which seem easy might still be better to go through the reasoning and tool use agent.
-   2. Try to reason if LLMs are good at solving the problem or if they usually struggle with that task.
-   3. Categories of problems that you HAVE TO answer YES to: Any Counting task (Numbers, Letters...), Math, Programming, Logic, Problem Solving, Analysis (even simple one), Trick Questions, Puzzles, Proof Reading, Text Editing, Fact Checking, Research, ...
-   4. Categories of problems that you HAVE TO answer NO to: Writing, Spelling, Summarizing (text, website, etc.), Translation, Simple Conversation, Simple Clarification, ...
+2. Within the <answer> tag, write out your final answer. Your answer should be a comma seperated list.
+    1. First choose the model the final-agent will use. Try to find a good balance between performance and cost. Larger models are bigger. 
+        - Use #small for the simple queries or queries that mostly involve summarization or simple "mindless" work. This also invloves very simple tool use, like converting a file, etc.
+        - Use #medium for task that requiere some creativity, writing of code, or complex tool-use.
+        - Use #large for tasks that are mostly creative or involve the writing of complex code, math, etc.
+        - Use #online for tasks that mostly requiere the use of the internet. Such as news or queries that will benifit greatly from up-to-date information. However, this model can not use tools.
+    2. Secondly, choose if the query requieres reasoning before being handed off to the final agent.
+        - Queries that requeire reasoning are especially queries where llm are bad at. Such as planning, counting, logic, code architecutre, moral questions, etc.
+        - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, simple tool use, etc. 
+        - If you think reasoning is needed, include #reasoning. If not #no-reasoning.
+        - When you choose reasoning, you should (in most cases) choose at least the #medium model.
 
 Example response:
 <reasoning>
 ... 
 (You are allowed new lines here)
 </reasoning>
-<task_difficulty>5</task_difficulty>
-<is_reasoning_or_tool_needed>YES</is_reasoning_or_tool_needed>
+<answer>#medium, #reasoning</answer>
 </system_instructions>"""
 
 REASONING_PROMPT = """<system_instructions>
@@ -176,6 +174,9 @@ class Pipe:
         HUGE_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet", description="Model for the largest tasks"
         )
+        ONLINE_MODEL: str = Field(
+            default="perplexity/llama-3.1-sonar-large-128k-online", description="Online Model"
+        )
         REASONING_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet"
         )
@@ -248,6 +249,8 @@ class Pipe:
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
             huge_model_id = self.valves.HUGE_MODEL
+
+            online_model_id = self.valves.ONLINE_MODEL
 
             planning_model_id = small_model_id
 
@@ -322,22 +325,22 @@ class Pipe:
             content = planning_buffer
             
             # Get the planning result from the xml tags
-            task_difficulty = re.findall(r"<task_difficulty>(.*?)</task_difficulty>", content)
-            task_difficulty = task_difficulty[0] if task_difficulty else "unknown"
+            csv_hastag_list = re.findall(r"<answer>(.*?)</answer>", content)
+            csv_hastag_list = csv_hastag_list[0] if csv_hastag_list else "unknown"
 
-            is_reasoning_needed = re.findall(r"<is_reasoning_or_tool_needed>(.*?)</is_reasoning_or_tool_needed>", content)
-            is_reasoning_needed = is_reasoning_needed[0] if is_reasoning_needed else "unknown"
-
-            model_to_use_id = small_model_id
-            if float(task_difficulty) >= 4:
+            if "#small" in csv_hastag_list:
+                model_to_use_id = small_model_id
+            elif "#medium" in csv_hastag_list:
                 model_to_use_id = large_model_id
-            if float(task_difficulty) >= 8:
+            elif "#large" in csv_hastag_list:
                 model_to_use_id = huge_model_id
+            elif "#online" in csv_hastag_list:
+                model_to_use_id = online_model_id
+            else:
+                model_to_use_id = small_model_id
 
-            await send_status(
-                        status_message=f"Planning complete. Task difficulty: {task_difficulty}. Using Model: {model_to_use_id}. Reasoning needed: {is_reasoning_needed}.",
-                        done=True,
-                    )
+            is_reasoning_needed = "YES" if "#reasoning" in csv_hastag_list else "NO"
+
             await send_citation(
                         url=f"SMART Planning",
                         title="SMART Planning",
@@ -345,17 +348,26 @@ class Pipe:
                     )
 
             # Try to find #!, #!!, #*yes, #*no, in the user message, let them overwrite the model choice
-            if "#!!!" in body["messages"][-1]["content"]:
+            if "#!!!" in body["messages"][-1]["content"] or "#large" in body["messages"][-1]["content"]:
                 model_to_use_id = huge_model_id
-            elif "#!!" in body["messages"][-1]["content"]:
+            elif "#!!" in body["messages"][-1]["content"] or "#medium" in body["messages"][-1]["content"]:
                 model_to_use_id = large_model_id
-            elif "#!" in body["messages"][-1]["content"]:
+            elif "#!" in body["messages"][-1]["content"] or "#small" in body["messages"][-1]["content"]:
                 model_to_use_id = small_model_id
+
+            if "#online" in body["messages"][-1]["content"]:
+                is_reasoning_needed = "NO"
+                model_to_use_id = online_model_id
             
             if "#*yes" in body["messages"][-1]["content"] or "#yes" in body["messages"][-1]["content"]:
                 is_reasoning_needed = "YES"
             elif "#*no" in body["messages"][-1]["content"] or "#no" in body["messages"][-1]["content"]:
                 is_reasoning_needed = "NO"
+
+            await send_status(
+                        status_message=f"Planning complete. Using Model: {model_to_use_id}. Reasoning needed: {is_reasoning_needed}.",
+                        done=True,
+                    )
 
             tools = []
             for key, value in __tools__.items():
@@ -375,7 +387,7 @@ class Pipe:
 
             if is_reasoning_needed == "NO":
                 messages_to_use[0]["content"] = messages_to_use[0]["content"] + USER_INTERACTION_PROMPT
-                messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "")
+                messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "").replace("#!!!", "").replace("#no", "").replace("#yes", "").replace("#large", "").replace("#medium", "").replace("#small", "").replace("#online", "")
 
                 graph = create_react_agent(model_to_use, tools=tools)
                 inputs = {"messages": body["messages"]}
@@ -404,7 +416,7 @@ class Pipe:
                         )
 
                 await send_status(
-                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s.",
+                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_to_use_id}. Reasoning was {'used' if is_reasoning_needed == True else 'not used'}.",
                         done=True,
                     )
                 return 
@@ -438,7 +450,7 @@ class Pipe:
                 if last_msg["role"] == "user":
                     reasoning_context += f"--- LAST USER MESSAGE/PROMPT ---\n{last_msg['content']}"
 
-                reasoning_context = reasoning_context.replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "")
+                reasoning_context = reasoning_context.replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "").replace("#!!!", "").replace("#no", "").replace("#yes", "").replace("#large", "").replace("#medium", "").replace("#small", "").replace("#online", "")
 
                 reasoning_messages = [
                     {
@@ -592,7 +604,7 @@ class Pipe:
 
                 if not num_tool_calls >= 4:
                     await send_status(
-                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s.",
+                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_to_use_id}. Reasoning was {'used' if is_reasoning_needed == True else 'not used'}.",
                         done=True,
                     )
                 return
