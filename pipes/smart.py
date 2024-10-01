@@ -9,7 +9,7 @@ version: 0.5
 licence: MIT
 """
 
-import os, re
+import os, re, time, datetime
 from typing import Callable, AsyncGenerator, Awaitable, Optional, Protocol
 
 from pydantic import BaseModel, Field # type: ignore
@@ -173,6 +173,9 @@ class Pipe:
         LARGE_MODEL: str = Field(
             default="openai/gpt-4o-2024-08-06", description="Model for large tasks"
         )
+        HUGE_MODEL: str = Field(
+            default="anthropic/claude-3.5-sonnet", description="Model for the largest tasks"
+        )
         REASONING_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet"
         )
@@ -235,6 +238,8 @@ class Pipe:
 
             self.setup()   
 
+            start_time = time.time()
+
             called_model_id = body["model"]
             mini_mode = False
             if called_model_id.endswith("-mini"):
@@ -242,6 +247,7 @@ class Pipe:
 
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
+            huge_model_id = self.valves.HUGE_MODEL
 
             planning_model_id = small_model_id
 
@@ -323,8 +329,10 @@ class Pipe:
             is_reasoning_needed = is_reasoning_needed[0] if is_reasoning_needed else "unknown"
 
             model_to_use_id = small_model_id
-            if float(task_difficulty) >= 5:
+            if float(task_difficulty) >= 4:
                 model_to_use_id = large_model_id
+            if float(task_difficulty) >= 8:
+                model_to_use_id = huge_model_id
 
             await send_status(
                         status_message=f"Planning complete. Task difficulty: {task_difficulty}. Using Model: {model_to_use_id}. Reasoning needed: {is_reasoning_needed}.",
@@ -337,10 +345,13 @@ class Pipe:
                     )
 
             # Try to find #!, #!!, #*yes, #*no, in the user message, let them overwrite the model choice
-            if "#!" in body["messages"][-1]["content"]:
-                model_to_use_id = small_model_id
-            elif"#!!" in body["messages"][-1]["content"]:
+            if "#!!!" in body["messages"][-1]["content"]:
+                model_to_use_id = huge_model_id
+            elif "#!!" in body["messages"][-1]["content"]:
                 model_to_use_id = large_model_id
+            elif "#!" in body["messages"][-1]["content"]:
+                model_to_use_id = small_model_id
+            
             if "#*yes" in body["messages"][-1]["content"] or "#yes" in body["messages"][-1]["content"]:
                 is_reasoning_needed = "YES"
             elif "#*no" in body["messages"][-1]["content"] or "#no" in body["messages"][-1]["content"]:
@@ -391,6 +402,11 @@ class Pipe:
                             title=event["name"],
                             content=f"Tool '{event['name']}' with inputs {data.get('input')} returned {data.get('output')}",
                         )
+
+                await send_status(
+                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s.",
+                        done=True,
+                    )
                 return 
             elif is_reasoning_needed == "YES": 
                 reasoning_model_id = self.valves.REASONING_MODEL
@@ -576,7 +592,7 @@ class Pipe:
 
                 if not num_tool_calls >= 4:
                     await send_status(
-                        status_message="Done!",
+                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s.",
                         done=True,
                     )
                 return
