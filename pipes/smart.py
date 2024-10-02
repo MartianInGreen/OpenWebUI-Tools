@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.7
+version: 0.8
 licence: MIT
 """
 
@@ -36,13 +36,13 @@ You should respond by following these steps:
 1. Within <reasoning> tags, plan what you will write in the other tags. This has to be your first step.
     1. First, reason about the task difficulty. What kind of task is it? What do your guidelines say about that?
     2. Second, reason about if the reasoning and tool use agent is needed. What do your guidelines say about that?
-    3. Third, think about what should be contained in your prompt. Don't write the prompt here already. Just think about what should be in it.
+    3. Third, reason about what model would best be used. What do your guidelines say about that?
 2. Within the <answer> tag, write out your final answer. Your answer should be a comma seperated list.
     1. First choose the model the final-agent will use. Try to find a good balance between performance and cost. Larger models are bigger. 
         - Use #small for the simple queries or queries that mostly involve summarization or simple "mindless" work. This also invloves very simple tool use, like converting a file, etc.
         - Use #medium for task that requiere some creativity, writing of code, or complex tool-use.
         - Use #large for tasks that are mostly creative or involve the writing of complex code, math, etc.
-        - Use #online for tasks that mostly requiere the use of the internet. Such as news or queries that will benifit greatly from up-to-date information. However, this model can not use tools.
+        - Use #online for tasks that mostly requiere the use of the internet. Such as news or queries that will benifit greatly from up-to-date information. However, this model can not use tools and does not have vision.
     2. Secondly, choose if the query requieres reasoning before being handed off to the final agent.
         - Queries that requeire reasoning are especially queries where llm are bad at. Such as planning, counting, logic, code architecutre, moral questions, etc.
         - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, simple tool use, etc. 
@@ -316,8 +316,8 @@ class Pipe:
                     message_content = message["content"]
                 print(f"Type of Message: {type(message_content)}. Length is {len(message_content)}")
                 if len(message_content) > 1000 and isinstance(message_content, str):
-                    mssg_length = len(message)
-                    content_to_use = message[:500] + "\n...(Middle of message cut by $NUMBER$)...\n" + message[-500:]
+                    mssg_length = len(message_content)
+                    content_to_use = message_content[:500] + "\n...(Middle of message cut by $NUMBER$)...\n" + message_content[-500:]
                     new_mssg_length = len(content_to_use)
                     content_to_use = content_to_use.replace("$NUMBER$", str(mssg_length - new_mssg_length))
                 elif isinstance(message_content, str):
@@ -658,7 +658,7 @@ class Pipe:
 
                 if not num_tool_calls >= 4:
                     await send_status(
-                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_to_use_id}. Reasoning was {'used' if is_reasoning_needed == True else 'not used'}.",
+                        status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_to_use_id}. Reasoning was used",
                         done=True,
                     )
                 return
