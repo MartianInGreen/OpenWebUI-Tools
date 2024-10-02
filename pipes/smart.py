@@ -5,11 +5,11 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.6
+version: 0.7
 licence: MIT
 """
 
-import os, re, time, datetime
+import os, re, time, datetime, json
 from typing import Callable, AsyncGenerator, Awaitable, Optional, Protocol
 
 from pydantic import BaseModel, Field # type: ignore
@@ -48,7 +48,7 @@ You should respond by following these steps:
         - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, simple tool use, etc. 
         - If you think reasoning is needed, include #reasoning. If not #no-reasoning.
         - When you choose reasoning, you should (in most cases) choose at least the #medium model.
-
+    
 Example response:
 <reasoning>
 ... 
@@ -56,6 +56,14 @@ Example response:
 </reasoning>
 <answer>#medium, #reasoning</answer>
 </system_instructions>"""
+
+# 3. And last, you can add tools to use. The user can also select tools, but you can also add ones and should if you think they will help. Better safe than sorry.
+#         - Avalible tools are #wolfram, #search, #scrape, and #python.
+#         - Wolfram|Alpha is a powerful computational knowledge engine. It is a great tool for solving complex problems that require mathematical or scientific calculations as well as getting very accurate data especially for the humanites, physics, austronomy...
+#         - Search is a tool that allows the agents to search the web. It is a great tool for getting up-to-date information. (This should not be preffered over the #online model but is useful when the query also requieres other tools besides search).
+#         - Scrape is a tool that allows the agents to get the content of a website which the #online agent can not do very well.
+#         - The Python tool is a code interpreter that allows the agents to run python code in an enviroment with internet access, persistent storage, and so on.
+
 
 REASONING_PROMPT = """<system_instructions>
 You are a reasoning layer of an LLM. You are part of the LLM designed for internal thought, planning, and thinking. 
@@ -181,7 +189,7 @@ class Pipe:
             default="anthropic/claude-3.5-sonnet"
         )
         MINI_REASONING_MODEL: str = Field(
-            default="openai/gpt-4o-2024-08-06", description="Model for small tasks"
+            default="openai/gpt-4o-2024-08-06", description="Reasoning for the -mini Model"
         )
         USE_GROQ_PLANNING_MODEL: str = Field(
             default="False", description="Use Groq planning model, input model ID if you want to use it."
@@ -241,6 +249,8 @@ class Pipe:
 
             start_time = time.time()
 
+            #print(f"{body=}")
+
             called_model_id = body["model"]
             mini_mode = False
             if called_model_id.endswith("-mini"):
@@ -296,12 +306,37 @@ class Pipe:
 
             combined_message = ""
             for message in body["messages"]:
-                if len(message) > 1000:
+                role = message["role"]
+                message_content = ""
+                content_to_use = ""
+                try:
+                    message_content = json.loads(message_content)
+                    message_content = message_content["content"]
+                except:
+                    message_content = message["content"]
+                print(f"Type of Message: {type(message_content)}. Length is {len(message_content)}")
+                if len(message_content) > 1000 and isinstance(message_content, str):
                     mssg_length = len(message)
-                    message = message[:500] + "\n...(Middle of message cut by $NUMBER$)...\n" + message[-500:]
-                    new_mssg_length = len(message)
-                    message = message.replace("$NUMBER$", str(mssg_length - new_mssg_length))
-                combined_message += f"--- NEXT MESSAGE FROM \"{message['role'].upper()}\" ---\n{message['content']}\n--- DONE ---\n"
+                    content_to_use = message[:500] + "\n...(Middle of message cut by $NUMBER$)...\n" + message[-500:]
+                    new_mssg_length = len(content_to_use)
+                    content_to_use = content_to_use.replace("$NUMBER$", str(mssg_length - new_mssg_length))
+                elif isinstance(message_content, str):
+                    content_to_use = message_content
+                elif isinstance(message_content, list):
+                    for part in message_content:
+                        #print(f"{part=}")
+                        if part["type"] == "text":
+                            text = part["text"]
+                            if len(text) > 1000 and isinstance(text, str):
+                                mssg_length = len(text)
+                                content_to_use = text[:500] + "\n...(Middle of message cut by $NUMBER$)...\n" + text[-500:]
+                                new_mssg_length = len(content_to_use)
+                                content_to_use = content_to_use.replace("$NUMBER$", str(mssg_length - new_mssg_length))
+                            else: 
+                                content_to_use += text
+                        if part["type"] == "image_url":
+                            content_to_use += "\nIMAGE FROM USER CUT HERE\n"
+                combined_message += f"--- NEXT MESSAGE FROM \"{str(role).upper()}\" ---\n{content_to_use}\n--- DONE ---\n"
 
             planning_messages.append({
                 "role": "user",
@@ -385,9 +420,23 @@ class Pipe:
 
             messages_to_use = body["messages"]
 
+            last_message_json = False
+            try:
+                if isinstance(messages_to_use[-1]["content"], list):
+                    last_message_json = True
+            except:
+                pass
+
+            #print(f"{messages_to_use=}")
+            #print(f"{last_message_json=}")
+
             if is_reasoning_needed == "NO":
                 messages_to_use[0]["content"] = messages_to_use[0]["content"] + USER_INTERACTION_PROMPT
-                messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "").replace("#!!!", "").replace("#no", "").replace("#yes", "").replace("#large", "").replace("#medium", "").replace("#small", "").replace("#online", "")
+                
+                if last_message_json == False:
+                    messages_to_use[-1]["content"] = str(messages_to_use[-1]["content"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "").replace("#!!!", "").replace("#no", "").replace("#yes", "").replace("#large", "").replace("#medium", "").replace("#small", "").replace("#online", "")
+                else:
+                    messages_to_use[-1]["content"][0]["text"] = str(messages_to_use[-1]["content"][0]["text"]).replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "").replace("#!!!", "").replace("#no", "").replace("#yes", "").replace("#large", "").replace("#medium", "").replace("#small", "").replace("#online", "")
 
                 graph = create_react_agent(model_to_use, tools=tools)
                 inputs = {"messages": body["messages"]}
@@ -447,8 +496,10 @@ class Pipe:
 
                 # Add the last message without cutting it
                 last_msg = body["messages"][-1]
-                if last_msg["role"] == "user":
-                    reasoning_context += f"--- LAST USER MESSAGE/PROMPT ---\n{last_msg['content']}"
+                if last_msg["role"] == "user" and last_message_json == False:
+                    reasoning_context = reasoning_context + f"--- LAST USER MESSAGE/PROMPT ---\n{last_msg['content']}"
+                elif last_msg["role"] == "user":
+                    reasoning_context = reasoning_context + f"--- LAST USER MESSAGE/PROMPT ---\n{last_msg['content'][0]['text']}"
 
                 reasoning_context = reasoning_context.replace("#*yes", "").replace("#*no", "").replace("#!!", "").replace("#!", "").replace("#!!!", "").replace("#no", "").replace("#yes", "").replace("#large", "").replace("#medium", "").replace("#small", "").replace("#online", "")
 
@@ -563,7 +614,10 @@ class Pipe:
                         done=True,
                     )
                 
-                messages_to_use[-1]["content"] = "<user_input>\n" + messages_to_use[-1]["content"] + "\n</user_input>\n\n" + full_content 
+                if last_message_json == False:
+                    messages_to_use[-1]["content"] = "<user_input>\n" + messages_to_use[-1]["content"] + "\n</user_input>\n\n" + full_content 
+                else:
+                    messages_to_use[-1]["content"][0]["text"] = "<user_input>\n" + messages_to_use[-1]["content"][0]["text"] + "\n</user_input>\n\n" + full_content 
                 messages_to_use[0]["content"] = messages_to_use[0]["content"] + USER_INTERACTION_PROMPT
                 #messages_to_use[-1]["content"] = messages_to_use[-1]["content"] + "\n\n<preprompt>" + next_agent_preprompt + "</preprompt>"
 
