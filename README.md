@@ -8,9 +8,11 @@ This toolkit aims to provide developers with a versatile set of resources to bui
 
 ## SMART - Sequential Multi-Agent Reasoning Technique
 
+---
 **Install instructions:**
 - Simply copy the `smart.py` code into a new function in OpenWebUI.
 - To create a new fuction go to `Workspaces -> Functions -> New Function (+ Icon)`
+---
 
 The SMART (Sequential Multi-Agent Reasoning Technique) system is a powerful pipeline for enhanced language model capabilities. It includes:
 
