@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 1.0.1
+version: 1.0.5
 licence: MIT
 """
 
@@ -186,10 +186,12 @@ class Pipe:
         OPENAI_API_KEY: str = Field(default="", description="Primary API key")
         MODEL_PREFIX: str = Field(default="SMART", description="Prefix before model ID")
         SMALL_MODEL: str = Field(
-            default="openai/gpt-4o-mini", description="Model for small tasks"
+            default="openai/gpt-4o-mini", 
+            description="Model for small tasks",
         )
         LARGE_MODEL: str = Field(
-            default="openai/gpt-4o-2024-08-06", description="Model for large tasks"
+            default="openai/gpt-4o-2024-08-06", 
+            description="Model for large tasks",
         )
         HUGE_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet",
@@ -198,21 +200,26 @@ class Pipe:
         REASONING_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet",
             description="Model for reasoning tasks",
-        ),
+        )
         ONLINE_MODEL: str = Field(
-            default="perplexity/llama-3.1-sonar-large-128k-online", description="Online Model"
-        ),
+            default="perplexity/llama-3.1-sonar-large-128k-online",
+            description="Online Model",
+        )
         MINI_REASONING_MODEL: str = Field(
-            default="openai/gpt-4o-2024-08-06", description="Reasoning for the -mini Model"
+            default="openai/gpt-4o-2024-08-06", 
+            description="Reasoning for the -mini Model",
         )
         USE_GROQ_PLANNING_MODEL: str = Field(
-            default="False", description="Use Groq planning model, input model ID if you want to use it."
+            default="False", 
+            description="Use Groq planning model, input model ID if you want to use it.",
         )
         GROQ_API_KEY: str = Field(
-           default="", description="Groq API key"
+           default="", 
+           description="Groq API key",
         )
         ONLY_USE_GROQ_FOR_MINI: bool = Field(
-            default=True, description="Only use Groq planning model for mini tasks"
+            default=bool(True),
+            description="Only use Groq planning model for mini tasks",
         )
         AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
         AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
@@ -272,6 +279,8 @@ class Pipe:
             huge_model_id = self.valves.HUGE_MODEL
             online_model_id = self.valves.ONLINE_MODEL
 
+            planning_model_id = small_model_id
+
             if self.valves.USE_GROQ_PLANNING_MODEL != "False":
                 if self.valves.ONLY_USE_GROQ_FOR_MINI == True and mini_mode == True:
                     planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
@@ -284,8 +293,6 @@ class Pipe:
             else:
                 planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
 
-            planning_model = ChatOpenAI(model=small_model_id, **self.openai_kwargs)  # type: ignore
-
             print(f"Small model: {small_model_id}")
             print(f"Large model: {large_model_id}")
 
@@ -294,7 +301,7 @@ class Pipe:
 
             config = {}
 
-            if __task__ == "title_generation":
+            if __task__ == "title_generation":           
                 content = small_model.invoke(body["messages"], config=config).content
                 assert isinstance(content, str)
                 yield content

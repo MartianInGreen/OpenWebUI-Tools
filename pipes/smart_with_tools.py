@@ -641,6 +641,10 @@ class Pipe:
             default="anthropic/claude-3.5-sonnet",
             description="Model for reasoning tasks",
         )
+        PLANNING_MODEL: str = Field(
+            default="openai/gpt-4o-mini",
+            description="Model for the planning step.",
+        )
         PYTHON_BASE_URL: str = Field(
             default="",
             description="Base URL for the API.",
@@ -920,8 +924,9 @@ class Pipe:
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
             huge_model_id = self.valves.HUGE_MODEL
+            planning_model_id = self.valves.PLANNING_MODEL
 
-            planning_model = ChatOpenAI(model=small_model_id, **self.openai_kwargs)  # type: ignore
+            planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
 
             print(f"Small model: {small_model_id}")
             print(f"Large model: {large_model_id}")
