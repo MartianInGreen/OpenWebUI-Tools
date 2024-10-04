@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph
-version: 0.8
+version: 1.0.1
 licence: MIT
 """
 
@@ -52,6 +52,7 @@ You should respond by following these steps:
         - Use #small for the simple queries or queries that mostly involve summarization or simple "mindless" work. This also invloves very simple tool use, like converting a file, etc.
         - Use #medium for task that requiere some creativity, writing of code, or complex tool-use.
         - Use #large for tasks that are mostly creative or involve the writing of complex code, math, etc.
+        - Use #online for tasks that mostly requiere the use of the internet. Such as news or queries that will benifit greatly from up-to-date information. However, this model can not use tools and does not have vision.
     2. Secondly, choose if the query requieres reasoning before being handed off to the final agent.
         - Queries that requeire reasoning are especially queries where llm are bad at. Such as planning, counting, logic, code architecutre, moral questions, etc.
         - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, simple tool use, etc. 
@@ -197,6 +198,21 @@ class Pipe:
         REASONING_MODEL: str = Field(
             default="anthropic/claude-3.5-sonnet",
             description="Model for reasoning tasks",
+        ),
+        ONLINE_MODEL: str = Field(
+            default="perplexity/llama-3.1-sonar-large-128k-online", description="Online Model"
+        ),
+        MINI_REASONING_MODEL: str = Field(
+            default="openai/gpt-4o-2024-08-06", description="Reasoning for the -mini Model"
+        )
+        USE_GROQ_PLANNING_MODEL: str = Field(
+            default="False", description="Use Groq planning model, input model ID if you want to use it."
+        )
+        GROQ_API_KEY: str = Field(
+           default="", description="Groq API key"
+        )
+        ONLY_USE_GROQ_FOR_MINI: bool = Field(
+            default=True, description="Only use Groq planning model for mini tasks"
         )
         AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
         AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
@@ -214,7 +230,7 @@ class Pipe:
         except Exception as e:
             return [{"id": "error", "name": f"Error: {e}"}]
 
-        return [{"id": self.valves.AGENT_ID, "name": self.valves.AGENT_NAME}]
+        return [{"id": self.valves.AGENT_ID, "name": self.valves.AGENT_NAME}, {"id": self.valves.AGENT_ID + "-mini", "name": self.valves.AGENT_NAME + "-mini"}]
 
     def setup(self):
         v = self.valves
@@ -244,11 +260,29 @@ class Pipe:
 
             start_time = time.time()
 
+            called_model_id = body["model"]
+            mini_mode = False
+            if called_model_id.endswith("-mini"):
+                mini_mode = True
+
             # print(f"{body=}")
 
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
             huge_model_id = self.valves.HUGE_MODEL
+            online_model_id = self.valves.ONLINE_MODEL
+
+            if self.valves.USE_GROQ_PLANNING_MODEL != "False":
+                if self.valves.ONLY_USE_GROQ_FOR_MINI == True and mini_mode == True:
+                    planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
+                    planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
+                elif self.valves.ONLY_USE_GROQ_FOR_MINI == False:
+                    planning_model_id = self.valves.USE_GROQ_PLANNING_MODEL
+                    planning_model = ChatOpenAI(model=planning_model_id, **self.groq_kwargs)  # type: ignore
+                else:
+                    planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
+            else:
+                planning_model = ChatOpenAI(model=planning_model_id, **self.openai_kwargs)  # type: ignore
 
             planning_model = ChatOpenAI(model=small_model_id, **self.openai_kwargs)  # type: ignore
 
@@ -351,6 +385,8 @@ class Pipe:
                 model_to_use_id = large_model_id
             elif "#large" in csv_hastag_list:
                 model_to_use_id = huge_model_id
+            elif "#online" in csv_hastag_list:
+                model_to_use_id = online_model_id
             else:
                 model_to_use_id = small_model_id
 
