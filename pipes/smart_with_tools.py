@@ -58,6 +58,7 @@ You should respond by following these steps:
     3. Third, reason about what model would best be used. What do your guidelines say about that?
 2. Within the <answer> tag, write out your final answer. Your answer should be a comma seperated list.
     1. First choose the model the final-agent will use. Try to find a good balance between performance and cost. Larger models are bigger. 
+        - There is #mini, this is a very small model, however it has a very large context window. This model can not use tools. This model is mostly not recommended.
         - Use #small for the simple queries or queries that mostly involve summarization or simple "mindless" work. This also invloves very simple tool use, like converting a file, etc.
         - Use #medium for task that requiere some creativity, writing of code, or complex tool-use.
         - Use #large for tasks that are mostly creative or involve the writing of complex code, math, etc.
@@ -627,6 +628,9 @@ class Pipe:
         )
         OPENAI_API_KEY: str = Field(default="", description="Primary API key")
         MODEL_PREFIX: str = Field(default="SMART", description="Prefix before model ID")
+        MINI_MODEL: str = Field(
+            default="google/gemini-flash-1.5", description="Model for small tasks"
+        )
         SMALL_MODEL: str = Field(
             default="openai/gpt-4o-mini", description="Model for small tasks"
         )
@@ -900,6 +904,15 @@ class Pipe:
             async with session.post(url, headers=headers, json=payload) as response:
                 result = await response.json()
                 return result
+            
+    async def dummy_tool(self):
+        """
+        Just ignore this tool. You get this message because the user has not assigned you any tools to use. 
+
+        :return: None
+        """
+
+        return "You have not assigned any tools to use."
 
     async def pipe(
         self,
@@ -921,6 +934,7 @@ class Pipe:
 
             # print(f"{body=}")
 
+            mini_model_id = self.valves.MINI_MODEL
             small_model_id = self.valves.SMALL_MODEL
             large_model_id = self.valves.LARGE_MODEL
             huge_model_id = self.valves.HUGE_MODEL
@@ -1021,6 +1035,8 @@ class Pipe:
             csv_hastag_list = re.findall(r"<answer>(.*?)</answer>", content)
             csv_hastag_list = csv_hastag_list[0] if csv_hastag_list else "unknown"
 
+            if "#mini" in csv_hastag_list:
+                model_to_use_id = mini_model_id
             if "#small" in csv_hastag_list:
                 model_to_use_id = small_model_id
             elif "#medium" in csv_hastag_list:
@@ -1078,6 +1094,11 @@ class Pipe:
                 or "#small" in body["messages"][-1]["content"]
             ):
                 model_to_use_id = small_model_id
+            elif (
+                "#.!" in body["messages"][-1]["content"]
+                or "#mini" in body["messages"][-1]["content"]
+            ):
+                model_to_use_id = mini_model_id
 
             if (
                 "#*yes" in body["messages"][-1]["content"]
@@ -1089,6 +1110,9 @@ class Pipe:
                 or "#no" in body["messages"][-1]["content"]
             ):
                 is_reasoning_needed = "NO"
+
+            if model_to_use_id == huge_model_id and len(tool_list) == 0:
+                tool_list.append("dummy_tool")
 
             await send_status(
                 status_message=f"Planning complete. Using Model: {model_to_use_id}. Reasoning needed: {is_reasoning_needed}.",
@@ -1221,6 +1245,25 @@ class Pipe:
                                 )
                             )
                         self.SYSTEM_PROMPT_INJECTION = self.SYSTEM_PROMPT_INJECTION + PROMPT_ImageGen
+                    if tool == "dummy_tool":
+                        dummy_tools = [
+                            (
+                                self.dummy_tool,
+                                "This is a dummy tool that does nothing. It is used when the user hasn't assigned any tools.",
+                            )
+                        ]
+                        for func, desc in dummy_tools:
+                            tools.append(
+                                StructuredTool(
+                                    func=None,
+                                    name=func.__name__,
+                                    coroutine=func,
+                                    args_schema=create_pydantic_model_from_docstring(
+                                        func
+                                    ),
+                                    description=desc,
+                                )
+                            )
 
             model_to_use = ChatOpenAI(model=model_to_use_id, **self.openai_kwargs)  # type: ignore
 
