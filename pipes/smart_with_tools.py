@@ -4,8 +4,8 @@ author: MartianInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
-requirements: langchain-openai==0.1.24, langgraph
-version: 0.8
+requirements: langchain-openai==0.1.24, langgraph, aiohttp
+version: 1.0
 licence: MIT
 """
 
@@ -28,6 +28,15 @@ from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
+
+import inspect
+
+
+# ---
+
+import requests
+import urllib
+import aiohttp
 
 # ---------------------------------------------------------------
 
@@ -57,6 +66,17 @@ You should respond by following these steps:
         - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, simple tool use, etc. 
         - If you think reasoning is needed, include #reasoning. If not #no-reasoning.
         - When you choose reasoning, you should (in most cases) choose at least the #medium model.
+    3. Third, you can make tools avalible to the tool-use and final agent. You can enable multiple tools.
+        - Avalible tools are #online, #python, #wolfram, #image-gen
+        - Use #online to enable multiple tools such as Search and a Scraping tool. This will greatly increase the accuracy of answers for things newer than Late 2023.
+        - Use #wolfram to enable access to Wolfram|Alpha, a powerful computational knowledge engine and scientific and real-time database.
+            - Wolfram|Alpha has a very powerful computational knowledge engine that is especially good at hard math questions, e.g. complex intervals, finding the roots of polynomials, etc.
+            - It is also very good at real time data, such as weather, stock prices, currency rates, etc.
+            - It is also a very useful scientific database, e.g. finding facts about Planets, Elements, Countries, etc.
+            - If you include wolfram, it is best to also include either #python or #online, depending on which field the query falls in.
+        - Use #python to enable access to a Python interpreter. This has internet access and can work with user files. Also useful for more complex plots and math.
+        - Use #image-gen to enable access to a image generation tool using the latest generation in image generation models.
+        - If the prompt involves math, enable either #python or #wolfram.
     
 Example response:
 <reasoning>
@@ -131,7 +151,430 @@ USER_INTERACTION_REASONING_PROMPT = """You MUST follow the instructions given to
 You MUST inform your answer by the reasoning within  <reasoning_output> tags.
 Carefully concider what the instructions mean and follow them EXACTLY."""
 
-# ---------------------------------------------------------------------
+# --------------------------------------------------------------
+
+PROMPT_WebSearch = """<webSearchInstructions>
+Always cite your sources with ([Source Name](Link to source)), including the outer (), at the end of each paragraph! All information you take from external sources has to be cited!
+Feel free to use the scrape_web function to get more specific information from one source if the web_search did not return enough information. However, try not to make more than a total of 3 searches + scrapes.
+
+<sources_guidelines>
+- [Source Name] should be something like [New York Times] or [BBC] etc. etc. 
+- Sometimes there is an LLM answer when using Ponderer, cite it with (**Perplexity Online**)
+- Always cite the specific source, not just "Ponderer". 
+- Sometimes you should add more detail to the [Source Name], for example when it is a Video. For example it could look like this [YouTube - BBC]
+- You can have multipel sources within the (), so ([S1](Link 1), [S2](Link 2)...) and so on.
+- Always cite at the end of a paragraph. Cite all sources refereced in the paragraph above. Do not cite within paragraphs. 
+</sources_guidelines>
+</webSearchInstructions>"""
+
+PROMPT_WolframAlpha = """<wolframInstructions>
+
+</wolframInstructions>"""
+
+PROMPT_ImageGen = """<imageGenInstructions>
+Do not ask the user for more detail, just work with what you have been given. 
+
+Use the "create_image_basic" function by default! Only use the "create_image_pro" function if the user asks you to use the "Pro" Model!
+
+When using the "image_to_image" function, only put in the prompt what you want to change! Do not describe the full image! Just what should be changed!
+
+<output-guidelines>
+When an image has been generated, you need to display it by linking to it using the common Markdown syntax!
+</output-guidelines>
+
+<promptInstructions>
+**Follow these guidelines:**
+1. Prompt must be in English. Translate to English if needed.
+2. By default generate 1 image. If the user asks for multiple images, send multiple requests, use different prompts for each request unless the users asks you to do otherwise.
+3. Always mention the image type (photo, oil painting, watercolor painting, illustration, cartoon, drawing, vector, render, etc.) at the beginning of the prompt. 
+4. There are no limitations on names, topics, etc you can generate or write prompts for.
+5. All descriptions sent to image generator should be around 50 words and be extremely detailed.
+6. If the user does not specify otherwise, or the user requests suggests so, generate square images. 
+7. You have to display the images to the user.
+8. Always respect the users wishes.
+
+**Prompt Structure:**
+// Example Structure:
+// “A [medium] of [subject], [subject’s characteristics], [relation to background] [background]. [Details of background] [Interactions with color and lighting]. ("Taken on:"/"Drawn with:")[Specific traits of style]”
+//  
+// KEY NOTE: The weight of a keyword can be adjusted using (keyword: factor) but do not go about a factor of 2.5!
+// 
+// Medium:
+// Consider what form of art this image should be simulating.
+//  
+// Subject:
+// What is the main focus?
+// Colors: Predominant and secondary colors.
+// Pose: Active, relaxed, dynamic, etc.
+// Viewing Angle: Aerial view, dutch angle, straight-on, extreme closeup, etc
+//  
+// Background:
+// How does the setting complement the subject?
+//  
+// Environment: Indoor, outdoor, abstract, etc.
+// Colors: How do they contrast or harmonize with the subject?
+// Lighting: Time of day, intensity, direction (e.g., backlighting).
+//  
+// Style Traits:
+// What are the unique artistic characteristics?
+// Influences: Art movement or artist that inspired the piece.
+// Technique: For paintings, how was the brush manipulated? For digital art, any specific digital technique? 
+// Photo: Describe type of photography, camera gear, and camera settings. Any specific shot technique? (Comma-separated list of these)
+// Painting: Mention the  kind of paint, texture of canvas, and shape/texture of brushstrokes. (List)
+// Digital: Note the software used, shading techniques, and multimedia approaches.
+// Never forget to add camera settings if it is indeed a photo-realistic image!
+</<promptInstructions>
+</imageGenInstructions>"""
+
+PROMPT_PythonInterpreter = """<pythonInstructions>
+
+</pythonInstructions>"""
+
+# ---------------------------------------------------------------
+# TOOLS
+# --------------------------------------------------------------
+
+
+def remove_html_tags(text):
+    """
+    Remove HTML tags from a string.
+
+    Args:
+        text (str): Input text possibly containing HTML tags.
+
+    Returns:
+        str: Text with HTML tags removed.
+    """
+    clean = re.compile("<.*?>")
+    return re.sub(clean, "", text)
+
+
+def decode_data(data):
+    """
+    Extract relevant information from the search API response.
+
+    Args:
+        data (dict): Response data from the search API.
+
+    Returns:
+        list: List of dictionaries containing the extracted information.
+    """
+    results = []
+
+    print(data)
+
+    # with open("data.json", "w") as f:
+    #    json.dump(data, f, indent=2)
+
+    # link = save_to_s3(data)
+    ##print("Saved search results to: " + link)
+
+    try:
+        try:
+            # #print if there are no infobox results
+            if not data["infobox"]["results"]:
+                print("No infobox results...")
+            else:
+                print("Infobox results found...")
+                # print(data["infobox"]["results"])
+            for result in data.get("infobox", {}).get("results", []):
+                url = result.get("url", "could not find url")
+                description = remove_html_tags(result.get("description", "") or "")
+                long_desc = remove_html_tags(result.get("long_desc", "") or "")
+                attributes = result.get("attributes", [])
+
+                attributes_dict = {
+                    attr[0]: remove_html_tags(attr[1] or "") for attr in attributes
+                }
+
+                result_entry = {
+                    "type": "infobox",
+                    "description": description,
+                    "url": url,
+                    "long_desc": long_desc,
+                    "attributes": attributes_dict,
+                }
+
+                results.append(result_entry)
+        except Exception as e:
+            print("Error in parsing infobox results...")
+            print(str(e))
+
+        try:
+            for i, result in enumerate(data["web"]["results"]):
+                if i >= 8:
+                    break
+                url = result.get("profile", {}).get("url") or result.get("url") or ""
+                title = remove_html_tags(result.get("title") or "")
+                age = result.get("age") or ""
+                description = remove_html_tags(result.get("description") or "")
+
+                deep_results = []
+                for snippet in result.get("extra_snippets") or []:
+                    cleaned_snippet = remove_html_tags(snippet)
+                    deep_results.append(cleaned_snippet)
+
+                result_entry = {
+                    "type": "web",
+                    "title": title,  # Corrected here
+                    "age": age,
+                    "description": description,
+                    "url": url,
+                }
+
+                if result.get("article"):
+                    article = result["article"] or {}
+                    result_entry["author"] = article.get("author") or ""
+                    result_entry["published"] = article.get("date") or ""
+                    result_entry["publisher_type"] = (
+                        article.get("publisher", {}).get("type") or ""
+                    )
+                    result_entry["publisher_name"] = (
+                        article.get("publisher", {}).get("name") or ""
+                    )
+
+                if deep_results:
+                    result_entry["deep_results"] = deep_results
+
+                # print(result_entry)
+
+                results.append(result_entry)
+        except Exception as e:
+            print("Error in parsing web results...")
+            print(str(e))
+
+        try:
+            for result in data["news"]["results"]:
+                url = result.get("profile", {}).get(
+                    "url", result.get("url", "could not find url")
+                )
+                description = remove_html_tags(result.get("description", ""))
+                title = remove_html_tags(result.get("title", "Could not find title"))
+                age = result.get("age", "Could not find age")
+
+                deep_results = []
+                for snippet in result.get("extra_snippets", []):
+                    cleaned_snippet = remove_html_tags(snippet)
+                    deep_results.append({"snippets": cleaned_snippet})
+
+                result_entry = {
+                    "type": "news",
+                    "title": title,  # Corrected here
+                    "age": age,
+                    "description": description,
+                    "url": url,
+                }
+
+                if deep_results:
+                    result_entry["deep_results"] = deep_results
+
+                results.append(result_entry)
+        except Exception as e:
+            print("Error in parsing news results...")
+            print(str(e))
+
+        try:
+            for i, result in enumerate(data["videos"]["results"]):
+                if i >= 4:
+                    break
+                url = result.get("profile", {}).get(
+                    "url", result.get("url", "could not find url")
+                )
+                description = remove_html_tags(result.get("description", ""))
+
+                deep_results = []
+                for snippet in result.get("extra_snippets", []):
+                    cleaned_snippet = remove_html_tags(snippet)
+                    deep_results.append({"snippets": cleaned_snippet})
+
+                result_entry = {
+                    "type": "videos",
+                    "description": description,
+                    "url": url,
+                }
+
+                if deep_results:
+                    result_entry["deep_results"] = deep_results
+
+                results.append(result_entry)
+        except Exception as e:
+            print("Error in parsing video results...")
+            print(str(e))
+
+        return results
+
+    except Exception as e:
+        print(str(e))
+        return ["No search results from Brave (or an error occurred)..."]
+
+
+def search_brave(query, country, language, focus, SEARCH_KEY):
+    """
+    Search using the Brave Search API.
+
+    Args:
+        query (str): Search query.
+        country (str): Two-letter country code.
+        freshness (str): Filter search results by freshness (e.g., '24h', 'week', 'month', 'year', 'all').
+        focus (str): Focus the search on specific types of results (e.g., 'web', 'news', 'reddit', 'video', 'all').
+
+    Returns:
+        list: List of dictionaries containing search results.
+    """
+    results_filter = "infobox"
+    if focus == "web" or focus == "all":
+        results_filter += ",web"
+    if focus == "news" or focus == "all":
+        results_filter += ",news"
+    if focus == "video":
+        results_filter += ",videos"
+
+    # Handle focuses that use goggles
+    goggles_id = ""
+    if focus == "reddit":
+        query = "site:reddit.com " + query
+    elif focus == "academia":
+        goggles_id = "&goggles_id=https://raw.githubusercontent.com/solso/goggles/main/academic_papers_search.goggle"
+    elif focus == "wikipedia":
+        query = "site:wikipedia.org " + query
+
+    encoded_query = urllib.parse.quote(query)
+    url = (
+        f"https://api.search.brave.com/res/v1/web/search?q={encoded_query}&results_filter={results_filter}&country={country}&search_lang=en&text_decorations=no&extra_snippets=true&count=20"
+        + goggles_id
+    )
+
+    # print(url)
+
+    headers = {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": SEARCH_KEY,
+    }
+
+    try:
+        start_search = time.time()
+        # print("Getting brave search results...")
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        end_search = time.time()
+        # print("Brave search took: " + str(end_search - start_search) + " seconds")
+    except Exception as e:
+        # print("Error fetching search results...")
+        # print(e)
+        return {"statusCode": 400, "body": json.dumps("Error fetching search results.")}
+
+    results = decode_data(data)
+    return results
+
+
+def search_images_and_video(query, country, type, freshness=None, SEARCH_KEY=None):
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://api.search.brave.com/res/v1/{type}/search?q={encoded_query}&country={country}&search_lang=en&count=10"
+
+    if (
+        freshness != None
+        and freshness in ["24h", "week", "month", "year"]
+        and type == "videos"
+    ):
+        # Map freshness to ["pd", "pw", "pm", "py"] / No freshness for "all"
+        freshness_map = {
+            "24h": "pd",
+            "week": "pw",
+            "month": "pm",
+            "year": "py",
+        }
+
+        freshness = freshness_map[freshness]
+
+        url += f"&freshness={freshness}"
+
+    # print(url)
+
+    headers = {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": SEARCH_KEY,
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        # return data
+        ##print(json.dumps(data, indent=2))
+
+        # link = save_to_s3(data)
+        ##print("Saved image results to: " + link)
+
+        if type == "images":
+            formatted_data = {}
+            for i, result in enumerate(data["results"], start=1):
+                # print(result)
+                formatted_data[f"image{i}"] = {
+                    "source": result["url"],
+                    "page_fetched": result["page_fetched"],
+                    "title": result["title"],
+                    "image_url": result["properties"]["url"],
+                }
+
+            return formatted_data
+        else:
+            return data
+    except Exception as e:
+        # print(e)
+        return {"statusCode": 400, "body": json.dumps("Error fetching image results.")}
+
+
+# ------------------------------------------------------------
+# Primary Function
+# ------------------------------------------------------------
+
+
+def searchWeb(
+    query: str,
+    country: str = "US",
+    language: str = "en",
+    focus: str = "all",
+    SEARCH_KEY=None,
+):
+    """
+    Search the web for the given query.
+
+    Parameters:
+    query (str): The query to search for.
+    country (str): The country to search from.
+    language (str): The language to search in.
+    focus (str): The type of search to perform.
+
+    Returns:
+    dict: The search results.
+    """
+
+    if focus not in [
+        "all",
+        "web",
+        "news",
+        "wikipedia",
+        "academia",
+        "reddit",
+        "images",
+        "videos",
+    ]:
+        focus = "all"
+
+    try:
+        if focus not in ["images", "video"]:
+            results = search_brave(query, country, language, focus, SEARCH_KEY)
+        else:
+            results = search_images_and_video(query, country, focus, SEARCH_KEY)
+    except Exception as e:
+        # print(e)
+        return {"statusCode": 400, "body": json.dumps("Error fetching search results.")}
+
+    return results
+
+
+# ---------------------------------------------------------------
 
 EmitterType = Optional[Callable[[dict], Awaitable[None]]]
 
@@ -198,6 +641,23 @@ class Pipe:
             default="anthropic/claude-3.5-sonnet",
             description="Model for reasoning tasks",
         )
+        PYTHON_BASE_URL: str = Field(
+            default="",
+            description="Base URL for the API.",
+        )
+        PYTHON_API_AUTH: str = Field(default="", description="API authentication")
+        BRAVE_SEARCH_KEY: str = Field(
+            default="",
+            description="Brave Search API Key",
+        )
+        WOLFRAMALPHA_APP_ID: str = Field(
+            default="",
+            description="WolframAlpha App ID",
+        )
+        FAL_API_KEY: str = Field(
+            default="",
+            description="FAL API Key",
+        )
         AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
         AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
 
@@ -206,6 +666,8 @@ class Pipe:
         self.valves = self.Valves(
             **{k: os.getenv(k, v.default) for k, v in self.Valves.model_fields.items()}
         )
+        os.environ["BRAVE_SEARCH_TOKEN"] = self.valves.BRAVE_SEARCH_KEY
+        os.environ["BRAVE_SEARCH_TOKEN_SECONDARY"] = self.valves.BRAVE_SEARCH_KEY
         print(f"{self.valves=}")
 
     def pipes(self) -> list[dict[str, str]]:
@@ -225,6 +687,215 @@ class Pipe:
             "api_key": v.OPENAI_API_KEY,
         }
         self.SYSTEM_PROMPT_INJECTION = ""
+
+    async def python_interpreter(self, uuid: str = "", code: str = ""):
+        """
+        Use a Python interpreter with internet access to execute code. No Notebook, use print etc. to output to STDOUT. Installed Libraries: numpy, scipy, pypdf2, pandas, pyarrow, matplotlib, pillow, opencv-python-headless, requests, bs4, geopandas, geopy, yfinance, seaborn, openpyxl, litellm, replicate, openai, ipython. Installed System libraries: wget git curl ffmpeg. You can link to files within the python intrpreter by using !(file_name)[https://api.rennersh.de/api/v1/interpreter/file/download/[uuid]/[filename]]. ALWAYS list the files before saying "can you upload that" or something similar, if the user is asking you to do something to a file they probably already uploaded it! You should use the same UUID for the entire conversation, unless the user specifically requests or gives you a new one.
+
+        :param uuid: The UUID of the Python interpreter. If the user did not give you one, generate a new one.
+        :param code: The code to be executed. Formatted without any additional code blocks as a string.
+        :return: The STD-OUT and STD-ERR of the executed python code.
+        """
+        endpoint = "/interpreter/python"
+        url = f"{self.valves.PYTHON_BASE_URL}{endpoint}"
+        payload = {"uuid": uuid, "code": code}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.valves.PYTHON_API_AUTH}",
+        }
+        response = requests.post(url, json=payload, headers=headers)
+        return response.json()
+
+    async def list_files(self, uuid: str, dirname: str = None):
+        """
+        List files in the interpreter.
+
+        :param uuid: The UUID of the Python interpreter. If the user did not give you one, generate a new one.
+        :param dirname: Specify a directory to list files from. Can be left empty.
+        :return: A list of files in the interpreter.
+        """
+        endpoint = "/interpreter/file/list"
+        url = f"{self.valves.PYTHON_BASE_URL}{endpoint}"
+        payload = {"uuid": uuid}
+        if dirname:
+            payload["dirname"] = dirname
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.valves.PYTHON_API_AUTH}",
+        }
+        response = requests.post(url, json=payload, headers=headers)
+        return response.json()
+
+    async def create_session(self):
+        """
+        Create a new interpreter session. If you create a new one you need to provide the UUID you just generated to the user.
+
+        :return: The UUID of the new interpreter session.
+        """
+        endpoint = "/interpreter/create"
+        url = f"{self.valves.PYTHON_BASE_URL}{endpoint}"
+        payload = {"create": "true"}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.valves.PYTHON_API_AUTH}",
+        }
+        response = requests.post(url, json=payload, headers=headers)
+        return response.json()
+
+    async def search_web(
+        self, query: str, country: str = "US", language: str = "en", focus: str = "all"
+    ):
+        """
+        Search the web for the given query.
+        :param query: The query to search for. Should be a string and optimized for search engines.
+        :param country: The country to search from. Two letter country code.
+        :param language: The language to search in. Language code like en, fr, de, etc.
+        :param focus: The type of search to perform. Can be "all", "web", "news", "wikipedia", "academia", "reddit", "images", "videos".
+        :return: The search results.
+        """
+
+        results = searchWeb(
+            query, country, language, focus, self.valves.BRAVE_SEARCH_KEY
+        )
+        print(results)
+        return json.dumps(results)
+
+    async def scrape_website(
+        self, url: str
+    ) -> str:
+        """
+        Scrape any website and get redable markdown formatted results.
+
+        :param url: The full url of the website you're trying to scrape. For example https://openai.com
+        :return: Get an LLM optimzed Markdown version of the website.
+        """
+        try:
+            # baseURL = f"http://api.wolframalpha.com/v2/query?appid={getEnvVar('WOLFRAM_APP_ID')}&output=json&input="
+            baseURL = f"https://r.jina.ai/{url}"
+
+            # Encode the query
+            # encoded_query = urllib.parse.quote(url)
+            url = baseURL  # + encoded_query
+
+            try:
+                response = requests.get(url)
+                # print(response)
+                data = response.text
+
+                data = (
+                    data
+                    + "\n\n--------------------------------------\nSource Guidlines: Include a link to https://r.jina.ai/{website_url} in your response."
+                )
+
+                return data
+
+            except Exception as e:
+                # print(e)
+                return "Error fetching Website results."
+        except Exception as e:
+            # print(e)
+            return "Error fetching Website results."
+
+    async def wolframAlpha(
+        self, query: str
+    ) -> str:
+        """
+        Query the WolframAlpha knowledge engine to answer a wide variety of questions. These questions can include real-time data questions, mathematical equasions or function, or scientific (data) questions. The engine also supports textual queries stated in English about other topics. You should cite this tool when it is used. It can also be used to supplement and back up knowledge you already know. WolframAlpha can also proive accurate real-time and scientific data (for example for elements, cities, weather, planets, etc. etc.). Request need to be kept simple and short.
+        :param query: The question or mathematical equation to ask the WolframAlpha engine. DO NOT use backticks or markdown when writing your JSON request.
+        :return: A short answer or explanation of the result of the query_string
+        """
+        try:
+            # baseURL = f"http://api.wolframalpha.com/v2/query?appid={getEnvVar('WOLFRAM_APP_ID')}&output=json&input="
+            baseURL = f"https://www.wolframalpha.com/api/v1/llm-api?appid={self.valves.WOLFRAMALPHA_APP_ID}&input="
+
+            # Encode the query
+            encoded_query = urllib.parse.quote(query)
+            url = baseURL + encoded_query
+
+            try:
+                response = requests.get(url)
+                # print(response)
+                data = response.text
+
+                data = (
+                    data
+                    + "\nAlways include the Wolfram|Alpha website link in your response to the user!\n\nIf there are any images provided, think about displaying them to the user."
+                )
+
+                return data
+
+            except Exception as e:
+                # print(e)
+                return "Error fetching Wolfram|Alpha results."
+        except Exception as e:
+            # print(e)
+            return "Error fetching Wolfram|Alpha results."
+        
+    async def create_image_basic(self, prompt: str, image_size: str = "square_hd"):
+        """
+        Generates an image based on a given prompt using the basic endpoint.
+
+        :param prompt: Detailed description of the image to generate.
+        :param image_size: Format of the image to generate. Can be: "square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"
+        :return: URL to the generated image.
+        """
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Key {self.valves.PYTHON_API_AUTH}",
+        }
+
+        url = f"{self.valves.PYTHON_BASE_URL}/imageGen"
+        payload = {"prompt": prompt, "image_size": image_size, "auth_key": self.valves.FAL_API_KEY, "model": "dev"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                result = await response.json()
+                return result
+
+    async def create_image_pro(self, prompt: str, image_size: str = "square_hd"):
+        """
+        Generates an image based on a given prompt using the pro endpoint.
+
+        :param prompt: Detailed description of the image to generate.
+        :param image_size: Format of the image to generate. Can be: "square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"
+        :return: URL to the generated image.
+        """
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Key {self.valves.PYTHON_API_AUTH}",
+        }
+
+        url = f"{self.valves.PYTHON_BASE_URL}/imageGen"
+        payload = {"prompt": prompt, "image_size": image_size, "auth_key": self.valves.FAL_API_KEY, "model": "pro"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                result = await response.json()
+                return result
+
+    async def image_to_image(self, prompt: str, image_url: str = "", image_size: str = "square_hd"):
+        """
+        Generates an image based on a given prompt using the image to image endpoint.
+
+        :param prompt: Detailed description of the image to generate.
+        :param image_url: URL to the image to use as a reference.
+        :param image_size: Format of the image to generate. Can be: "square_hd", "square", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"
+        :return: URL to the generated image.
+        """
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Key {self.valves.PYTHON_API_AUTH}",
+        }
+
+        url = f"{self.valves.PYTHON_BASE_URL}/imageGen"
+        payload = {"prompt": prompt, "image_size": image_size, "image_url": image_url, "auth_key": self.valves.FAL_API_KEY, "model": "image-to-image"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                result = await response.json()
+                return result
 
     async def pipe(
         self,
@@ -356,6 +1027,30 @@ class Pipe:
 
             is_reasoning_needed = "YES" if "#reasoning" in csv_hastag_list else "NO"
 
+            tool_list = []
+
+            if not "#no-tools" in body["messages"][-1]["content"]:
+                if (
+                    "#online" in csv_hastag_list
+                    or "#online" in body["messages"][-1]["content"]
+                ):
+                    tool_list.append("online")
+                if (
+                    "#wolfram" in csv_hastag_list
+                    or "#wolfram" in body["messages"][-1]["content"]
+                ):
+                    tool_list.append("wolfram_alpha")
+                if (
+                    "#python" in csv_hastag_list
+                    or "#python" in body["messages"][-1]["content"]
+                ):
+                    tool_list.append("python_interpreter")
+                if (
+                    "#image-gen" in csv_hastag_list
+                    or "#image-gen" in body["messages"][-1]["content"]
+                ):
+                    tool_list.append("image_generation")
+
             await send_citation(
                 url=f"SMART Planning",
                 title="SMART Planning",
@@ -406,6 +1101,121 @@ class Pipe:
                         description=value["spec"]["description"],
                     )
                 )
+
+            def create_pydantic_model_from_docstring(func):
+                doc = inspect.getdoc(func)
+                if not doc:
+                    return create_model(f"{func.__name__}Args")
+
+                param_descriptions = {}
+                for line in doc.split("\n"):
+                    if ":param" in line:
+                        param, desc = line.split(":param ", 1)[1].split(":", 1)
+                        param = param.strip()
+                        desc = desc.strip()
+                        param_descriptions[param] = desc
+
+                type_hints = get_type_hints(func)
+                fields = {}
+                for param, hint in type_hints.items():
+                    if param != "return":
+                        fields[param] = (
+                            hint,
+                            Field(description=param_descriptions.get(param, "")),
+                        )
+
+                return create_model(f"{func.__name__}Args", **fields)
+
+            # In the pipe method, update the tools creation:
+
+            if len(tool_list) > 0:
+                for tool in tool_list:
+                    if tool == "python_interpreter":
+                        python_tools = [
+                            (
+                                self.python_interpreter,
+                                "Use a Python interpreter with internet access to execute code.",
+                            ),
+                            (self.list_files, "List files in the interpreter."),
+                            (self.create_session, "Create a new interpreter session."),
+                        ]
+                        for func, desc in python_tools:
+                            tools.append(
+                                StructuredTool(
+                                    func=None,
+                                    name=func.__name__,
+                                    coroutine=func,
+                                    args_schema=create_pydantic_model_from_docstring(
+                                        func
+                                    ),
+                                    description=desc,
+                                )
+                            )
+                    if tool == "online":
+                        online_tools = [
+                            (self.search_web, "Search the internet for information."),
+                            (self.scrape_website, "Get the contents of a website/url."),
+                        ]
+                        for func, desc in online_tools:
+                            tools.append(
+                                StructuredTool(
+                                    func=None,
+                                    name=func.__name__,
+                                    coroutine=func,
+                                    args_schema=create_pydantic_model_from_docstring(
+                                        func
+                                    ),
+                                    description=desc,
+                                )
+                            )
+                        self.SYSTEM_PROMPT_INJECTION = self.SYSTEM_PROMPT_INJECTION + PROMPT_WebSearch
+                    if tool == "wolfram_alpha":
+                        wolfram_tools = [
+                            (
+                                self.wolframAlpha,
+                                "Query the WolframAlpha knowledge engine to answer a wide variety of questions.",
+                            )
+                        ]
+                        for func, desc in wolfram_tools:
+                            tools.append(
+                                StructuredTool(
+                                    func=None,
+                                    name=func.__name__,
+                                    coroutine=func,
+                                    args_schema=create_pydantic_model_from_docstring(
+                                        func
+                                    ),
+                                    description=desc,
+                                )
+                            )
+                    if tool == "image_generation":
+                        image_tools = [
+                                (
+                                    self.create_image_basic,
+                                    "Generate an image based on a text prompt. With Flux Dev",
+                                ),
+                                (
+                                    self.create_image_pro,
+                                    "Generate an image based on a text prompt. With Flux Pro",
+                                ),
+                                (
+                                    self.image_to_image,
+                                    "Generate an image based on an image (in url form) and a text prompt."
+                                )
+                            ]
+                        for func, desc in image_tools:
+                            tools.append(
+                                StructuredTool(
+                                    func=None,
+                                    name=func.__name__,
+                                    coroutine=func,
+                                    args_schema=create_pydantic_model_from_docstring(
+                                        func
+                                    ),
+                                    description=desc,
+                                )
+                            )
+                        self.SYSTEM_PROMPT_INJECTION = self.SYSTEM_PROMPT_INJECTION + PROMPT_ImageGen
 
             model_to_use = ChatOpenAI(model=model_to_use_id, **self.openai_kwargs)  # type: ignore
 

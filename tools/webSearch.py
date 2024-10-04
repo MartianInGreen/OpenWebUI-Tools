@@ -9,7 +9,6 @@ import urllib, requests, os, json, time, re
 from dotenv import load_dotenv #type: ignore
 
 # Prettier #print
-from rich import print
 from pydantic import BaseModel, Field #type: ignore
 from typing import Callable, Awaitable
 
@@ -27,9 +26,7 @@ class Tools:
         os.environ["BRAVE_SEARCH_TOKEN"] = self.valves.BRAVE_SEARCH_KEY
         os.environ["BRAVE_SEARCH_TOKEN_SECONDARY"] = self.valves.BRAVE_SEARCH_KEY
 
-    # ------------------------------------------------------------
-
-
+# ------------------------------------------------------------
 # Helper functions
 # ------------------------------------------------------------
 

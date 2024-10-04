@@ -1,5 +1,5 @@
 """
-title: Scrape Website
+title: Python Interpreter
 author: MartainInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 version: 0.1.0
