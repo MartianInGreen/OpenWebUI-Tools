@@ -43,7 +43,7 @@ import aiohttp
 PLANNING_PROMPT = """<system_instructions>
 You are a planning Agent. You are part of an agent chain designed to make LLMs more capable. 
 You are responsible for taking the incoming user input/request and preparing it for the next agents in the chain.
-After you will come a reasoning and tool use agent. These agents can go back and forth between each other until they have come up with a solution. 
+After you will come either a reasoning agent or the final agent. 
 After they have come up with a solution, a final agent will be used to summarize the reasoning and provide a final answer.
 Only use a Newline after each closing tag. Never after the opening tag or within the tags.
 
@@ -54,7 +54,7 @@ Guidelines:
 You should respond by following these steps:
 1. Within <reasoning> tags, plan what you will write in the other tags. This has to be your first step.
     1. First, reason about the task difficulty. What kind of task is it? What do your guidelines say about that?
-    2. Second, reason about if the reasoning and tool use agent is needed. What do your guidelines say about that?
+    2. Second, reason about if the reasoning is needed. What do your guidelines say about that?
     3. Third, reason about what model would best be used. What do your guidelines say about that?
 2. Within the <answer> tag, write out your final answer. Your answer should be a comma seperated list.
     1. First choose the model the final-agent will use. Try to find a good balance between performance and cost. Larger models are bigger. 
@@ -64,10 +64,10 @@ You should respond by following these steps:
         - Use #large for tasks that are mostly creative or involve the writing of complex code, math, etc.
     2. Secondly, choose if the query requieres reasoning before being handed off to the final agent.
         - Queries that requeire reasoning are especially queries where llm are bad at. Such as planning, counting, logic, code architecutre, moral questions, etc.
-        - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, simple tool use, etc. 
+        - Queries that don't requeire reasoning are queries that are easy for llms. Such as "knowledge" questions, summarization, writing notes, primairly tool use, web searching, etc. 
         - If you think reasoning is needed, include #reasoning. If not #no-reasoning.
         - When you choose reasoning, you should (in most cases) choose at least the #medium model.
-    3. Third, you can make tools avalible to the tool-use and final agent. You can enable multiple tools.
+    3. Third, you can make tools avalible to the final agent. You can enable multiple tools.
         - Avalible tools are #online, #python, #wolfram, #image-gen
         - Use #online to enable multiple tools such as Search and a Scraping tool. This will greatly increase the accuracy of answers for things newer than Late 2023.
         - Use #wolfram to enable access to Wolfram|Alpha, a powerful computational knowledge engine and scientific and real-time database.
@@ -228,7 +228,16 @@ When an image has been generated, you need to display it by linking to it using 
 </imageGenInstructions>"""
 
 PROMPT_PythonInterpreter = """<pythonInstructions>
-
+ Use a Python interpreter with internet access to execute code. 
+ No Notebook, use print etc. to output to STDOUT. 
+ Installed Libraries: numpy, scipy, pypdf2, pandas, pyarrow, matplotlib, pillow, opencv-python-headless, requests, bs4, geopandas, geopy, yfinance, seaborn, openpyxl, litellm, replicate, openai, ipython. 
+ Installed System libraries: wget git curl ffmpeg. 
+ 
+ You can link to files within the python intrpreter by using !(file_name)[https://api.rennersh.de/api/v1/interpreter/file/download/[uuid]/[filename]]. If the file is an image you should always use the !()[] syntax instead of ()[].
+ ALWAYS list the files before saying "can you upload that" or something similar, if the user is asking you to do something to a file they probably already uploaded it! 
+ 
+ You should use the same UUID for the entire conversation, unless the user specifically requests or gives you a new one. 
+ Always add all UUIDs of the interpreters you used at the VERY beginning of your answer to the user! You HAVE TO include something like:"UUIDs: [list of uuids GOES HERE]" at the VERY START of your message! THE USER NEEDS TO KNOW THE uuid!
 </pythonInstructions>"""
 
 # ---------------------------------------------------------------
@@ -1180,6 +1189,7 @@ class Pipe:
                                     description=desc,
                                 )
                             )
+                        self.SYSTEM_PROMPT_INJECTION = self.SYSTEM_PROMPT_INJECTION + PROMPT_PythonInterpreter
                     if tool == "online":
                         online_tools = [
                             (self.search_web, "Search the internet for information."),
