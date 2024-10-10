@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
 required_open_webui_version: 0.3.30
 requirements: langchain-openai==0.1.24, langgraph, aiohttp
-version: 1.0
+version: 1.0.6
 licence: MIT
 """
 
@@ -1087,36 +1087,36 @@ class Pipe:
                 content=f"{content=}",
             )
 
+            last_message_content = body["messages"][-1]["content"]
+
+            if isinstance(last_message_content, list):
+                last_message_content = last_message_content[0]["text"]
+
             # Try to find #!, #!!, #*yes, #*no, in the user message, let them overwrite the model choice
             if (
-                "#!!!" in body["messages"][-1]["content"]
-                or "#large" in body["messages"][-1]["content"]
+                "#!!!" in last_message_content
+                or "#large" in last_message_content
             ):
                 model_to_use_id = huge_model_id
             elif (
-                "#!!" in body["messages"][-1]["content"]
-                or "#medium" in body["messages"][-1]["content"]
+                "#!!" in last_message_content
+                or "#medium" in last_message_content
             ):
                 model_to_use_id = large_model_id
             elif (
-                "#!" in body["messages"][-1]["content"]
-                or "#small" in body["messages"][-1]["content"]
+                "#!" in last_message_content
+                or "#small" in last_message_content
             ):
                 model_to_use_id = small_model_id
-            elif (
-                "#.!" in body["messages"][-1]["content"]
-                or "#mini" in body["messages"][-1]["content"]
-            ):
-                model_to_use_id = mini_model_id
 
             if (
-                "#*yes" in body["messages"][-1]["content"]
-                or "#yes" in body["messages"][-1]["content"]
+                "#*yes" in last_message_content
+                or "#yes" in last_message_content
             ):
                 is_reasoning_needed = "YES"
             elif (
-                "#*no" in body["messages"][-1]["content"]
-                or "#no" in body["messages"][-1]["content"]
+                "#*no" in last_message_content
+                or "#no" in last_message_content
             ):
                 is_reasoning_needed = "NO"
 
