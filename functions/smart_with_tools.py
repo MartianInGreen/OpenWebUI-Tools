@@ -244,6 +244,8 @@ No Notebook, use print etc. to output to STDOUT.
 Installed Libraries: numpy, scipy, pypdf2, pandas, pyarrow, matplotlib, pillow, opencv-python-headless, requests, bs4, geopandas, geopy, yfinance, seaborn, openpyxl, litellm, replicate, openai, ipython. 
 Installed System libraries: wget git curl ffmpeg. 
 
+This is not a python notebook! It is a python enviorment in which you can execute code. You will need to use print() and .save() etc. to output to STDOUT or Files!
+
 You can link to files within the python intrpreter by using !(file_name)[https://api.rennersh.de/api/v1/interpreter/file/download/[uuid]/[filename]]. If the file is an image you should always use the !()[] syntax instead of ()[].
 ALWAYS list the files before saying "can you upload that" or something similar, if the user is asking you to do something to a file they probably already uploaded it! 
 
