@@ -160,8 +160,7 @@ Feel free to use the scrape_web function to get more specific information from o
 
 <sources_guidelines>
 - [Source Name] should be something like [New York Times] or [BBC] etc. etc. 
-- Sometimes there is an LLM answer when using Ponderer, cite it with (**Perplexity Online**)
-- Always cite the specific source, not just "Ponderer". 
+- Always cite the specific source.
 - Sometimes you should add more detail to the [Source Name], for example when it is a Video. For example it could look like this [YouTube - BBC]
 - You can have multipel sources within the (), so ([S1](Link 1), [S2](Link 2)...) and so on.
 - Always cite at the end of a paragraph. Cite all sources refereced in the paragraph above. Do not cite within paragraphs. 
@@ -169,7 +168,19 @@ Feel free to use the scrape_web function to get more specific information from o
 </webSearchInstructions>"""
 
 PROMPT_WolframAlpha = """<wolframInstructions>
+Wolfram|Alpha is an advanced computational knowledge engine and database with accurate scientific and real-time data. 
 
+Wolfram|Alpha's queries should be kept simple. For example "plot of f(x)=3x^2 for x in [0,10]" is a good query. However advanced plotting should be done with python preferably. 
+Wolfram|Alpha has advanced math capabilites but is not good when a large number of computations is needed. It is best used math problems where only a few computations are needed. 
+- It can solve integrals, derivates, limits etc.
+- You should input math in either natural language or using latex, however try to keep it clean and understandable.
+
+Wolfam|Alpha also has a very good database:
+- It has information on population, countries, cities, production of goods, trade, people, etc.
+- It has information about planets, astronomical objects, elements, etc.
+- It has accurate real time weather data and predictions, stock prices, currency rates, etc.
+
+If you also have the webSearch plugin enabled, try to prefer Wolfram|Alpha over that. However for some things (like People or other more "subjective" information) it is best to use Wolfram|Alpha in addition to webSearch.
 </wolframInstructions>"""
 
 PROMPT_ImageGen = """<imageGenInstructions>
@@ -228,16 +239,16 @@ When an image has been generated, you need to display it by linking to it using 
 </imageGenInstructions>"""
 
 PROMPT_PythonInterpreter = """<pythonInstructions>
- Use a Python interpreter with internet access to execute code. 
- No Notebook, use print etc. to output to STDOUT. 
- Installed Libraries: numpy, scipy, pypdf2, pandas, pyarrow, matplotlib, pillow, opencv-python-headless, requests, bs4, geopandas, geopy, yfinance, seaborn, openpyxl, litellm, replicate, openai, ipython. 
- Installed System libraries: wget git curl ffmpeg. 
- 
- You can link to files within the python intrpreter by using !(file_name)[https://api.rennersh.de/api/v1/interpreter/file/download/[uuid]/[filename]]. If the file is an image you should always use the !()[] syntax instead of ()[].
- ALWAYS list the files before saying "can you upload that" or something similar, if the user is asking you to do something to a file they probably already uploaded it! 
- 
- You should use the same UUID for the entire conversation, unless the user specifically requests or gives you a new one. 
- Always add all UUIDs of the interpreters you used at the VERY beginning of your answer to the user! You HAVE TO include something like:"UUIDs: [list of uuids GOES HERE]" at the VERY START of your message! THE USER NEEDS TO KNOW THE uuid!
+Use a Python interpreter with internet access to execute code. 
+No Notebook, use print etc. to output to STDOUT. 
+Installed Libraries: numpy, scipy, pypdf2, pandas, pyarrow, matplotlib, pillow, opencv-python-headless, requests, bs4, geopandas, geopy, yfinance, seaborn, openpyxl, litellm, replicate, openai, ipython. 
+Installed System libraries: wget git curl ffmpeg. 
+
+You can link to files within the python intrpreter by using !(file_name)[https://api.rennersh.de/api/v1/interpreter/file/download/[uuid]/[filename]]. If the file is an image you should always use the !()[] syntax instead of ()[].
+ALWAYS list the files before saying "can you upload that" or something similar, if the user is asking you to do something to a file they probably already uploaded it! 
+
+You should use the same UUID for the entire conversation, unless the user specifically requests or gives you a new one. 
+Always add all UUIDs of the interpreters you used at the VERY beginning of your answer to the user! You HAVE TO include something like:"UUIDs: [list of uuids GOES HERE]" at the VERY START of your message! THE USER NEEDS TO KNOW THE uuid!
 </pythonInstructions>"""
 
 # ---------------------------------------------------------------
