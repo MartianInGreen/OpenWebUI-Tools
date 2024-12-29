@@ -4,7 +4,7 @@ author: MartianInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. Now with tools.
 required_open_webui_version: 0.5.0
-requirements: langchain-openai==0.2.14, langgraph==0.2.60 aiohttp
+requirements: langchain-openai==0.2.14, langgraph==0.2.60, aiohttp
 version: 1.1
 licence: MIT
 """
@@ -700,8 +700,6 @@ class Pipe:
     def __init__(self):
         try:
             self.type = "manifold"
-            self.id = "smart-core"
-            self.name = "Smart Core"
             self.valves = self.Valves(
                 **{k: os.getenv(k, v.default) for k, v in self.Valves.model_fields.items()}
             )
