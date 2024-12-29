@@ -3,9 +3,9 @@ title: SMART - Sequential Multi-Agent Reasoning Technique
 author: MartianInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
-required_open_webui_version: 0.3.30
-requirements: langchain-openai==0.1.24, langgraph, aiohttp
-version: 1.0.6
+required_open_webui_version: 0.5.0
+requirements: langchain-openai==0.2.14, langgraph==0.2.60 aiohttp
+version: 1.1
 licence: MIT
 """
 
@@ -29,8 +29,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
 
-import inspect
+from fastapi import Request
 
+import traceback
+
+import inspect
 
 # ---
 
@@ -244,7 +247,7 @@ No Notebook, use print etc. to output to STDOUT.
 Installed Libraries: numpy, scipy, pypdf2, pandas, pyarrow, matplotlib, pillow, opencv-python-headless, requests, bs4, geopandas, geopy, yfinance, seaborn, openpyxl, litellm, replicate, openai, ipython. 
 Installed System libraries: wget git curl ffmpeg. 
 
-This is not a python notebook! It is a python enviorment in which you can execute code. You will need to use print() and .save() etc. to output to STDOUT or Files!
+This is not a python notebook! It is a python enviorment in which you can execute code. You will need to use print() and .save() etc. to output to STDOUT or Files! YOU CAN NOT USE PLOT.SHOW() AND SIMILAR!
 
 You can link to files within the python intrpreter by using !(file_name)[https://api.rennersh.de/api/v1/interpreter/file/download/[uuid]/[filename]]. If the file is an image you should always use the !()[] syntax instead of ()[].
 ALWAYS list the files before saying "can you upload that" or something similar, if the user is asking you to do something to a file they probably already uploaded it! 
@@ -644,79 +647,92 @@ def get_send_status(__event_emitter__: EmitterType) -> SendStatusType:
 
 class Pipe:
     class Valves(BaseModel):
-        OPENAI_BASE_URL: str = Field(
-            default="https://openrouter.ai/api/v1",
-            description="Base URL for OpenAI API endpoints",
-        )
-        OPENAI_API_KEY: str = Field(default="", description="Primary API key")
-        MODEL_PREFIX: str = Field(default="SMART", description="Prefix before model ID")
-        MINI_MODEL: str = Field(
-            default="google/gemini-flash-1.5", description="Model for small tasks"
-        )
-        SMALL_MODEL: str = Field(
-            default="openai/gpt-4o-mini", description="Model for small tasks"
-        )
-        LARGE_MODEL: str = Field(
-            default="openai/gpt-4o-2024-08-06", description="Model for large tasks"
-        )
-        HUGE_MODEL: str = Field(
-            default="anthropic/claude-3.5-sonnet",
-            description="Model for the largest tasks",
-        )
-        REASONING_MODEL: str = Field(
-            default="anthropic/claude-3.5-sonnet",
-            description="Model for reasoning tasks",
-        )
-        PLANNING_MODEL: str = Field(
-            default="openai/gpt-4o-mini",
-            description="Model for the planning step.",
-        )
-        PYTHON_BASE_URL: str = Field(
-            default="",
-            description="Base URL for the API.",
-        )
-        PYTHON_API_AUTH: str = Field(default="", description="API authentication")
-        BRAVE_SEARCH_KEY: str = Field(
-            default="",
-            description="Brave Search API Key",
-        )
-        WOLFRAMALPHA_APP_ID: str = Field(
-            default="",
-            description="WolframAlpha App ID",
-        )
-        FAL_API_KEY: str = Field(
-            default="",
-            description="FAL API Key",
-        )
-        AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
-        AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
+        try:
+            OPENAI_BASE_URL: str = Field(
+                default="https://openrouter.ai/api/v1",
+                description="Base URL for OpenAI API endpoints",
+            )
+            OPENAI_API_KEY: str = Field(default="", description="Primary API key")
+            MODEL_PREFIX: str = Field(default="SMART", description="Prefix before model ID")
+            MINI_MODEL: str = Field(
+                default="google/gemini-flash-1.5", description="Model for small tasks"
+            )
+            SMALL_MODEL: str = Field(
+                default="openai/gpt-4o-mini", description="Model for small tasks"
+            )
+            LARGE_MODEL: str = Field(
+                default="openai/gpt-4o-2024-08-06", description="Model for large tasks"
+            )
+            HUGE_MODEL: str = Field(
+                default="anthropic/claude-3.5-sonnet",
+                description="Model for the largest tasks",
+            )
+            REASONING_MODEL: str = Field(
+                default="anthropic/claude-3.5-sonnet",
+                description="Model for reasoning tasks",
+            )
+            PLANNING_MODEL: str = Field(
+                default="openai/gpt-4o-mini",
+                description="Model for the planning step.",
+            )
+            PYTHON_BASE_URL: str = Field(
+                default="",
+                description="Base URL for the API.",
+            )
+            PYTHON_API_AUTH: str = Field(default="", description="API authentication")
+            BRAVE_SEARCH_KEY: str = Field(
+                default="",
+                description="Brave Search API Key",
+            )
+            WOLFRAMALPHA_APP_ID: str = Field(
+                default="",
+                description="WolframAlpha App ID",
+            )
+            FAL_API_KEY: str = Field(
+                default="",
+                description="FAL API Key",
+            )
+            AGENT_NAME: str = Field(default="Smart/Core", description="Name of the agent")
+            AGENT_ID: str = Field(default="smart-core", description="ID of the agent")
+        except Exception as e:
+            traceback.print_exc()
 
     def __init__(self):
-        self.type = "manifold"
-        self.valves = self.Valves(
-            **{k: os.getenv(k, v.default) for k, v in self.Valves.model_fields.items()}
-        )
-        os.environ["BRAVE_SEARCH_TOKEN"] = self.valves.BRAVE_SEARCH_KEY
-        os.environ["BRAVE_SEARCH_TOKEN_SECONDARY"] = self.valves.BRAVE_SEARCH_KEY
-        print(f"{self.valves=}")
+        try:
+            self.type = "manifold"
+            self.id = "smart-core"
+            self.name = "Smart Core"
+            self.valves = self.Valves(
+                **{k: os.getenv(k, v.default) for k, v in self.Valves.model_fields.items()}
+            )
+            os.environ["BRAVE_SEARCH_TOKEN"] = self.valves.BRAVE_SEARCH_KEY
+            os.environ["BRAVE_SEARCH_TOKEN_SECONDARY"] = self.valves.BRAVE_SEARCH_KEY
+            print(f"{self.valves=}")
+        except Exception as e:
+            traceback.print_exc()
 
     def pipes(self) -> list[dict[str, str]]:
         try:
             self.setup()
         except Exception as e:
+            traceback.print_exc()
             return [{"id": "error", "name": f"Error: {e}"}]
 
         return [{"id": self.valves.AGENT_ID, "name": self.valves.AGENT_NAME}]
+        pass
 
     def setup(self):
-        v = self.valves
-        if not v.OPENAI_API_KEY or not v.OPENAI_BASE_URL:
-            raise Exception("Error: OPENAI_API_KEY or OPENAI_BASE_URL is not set")
-        self.openai_kwargs = {
-            "base_url": v.OPENAI_BASE_URL,
-            "api_key": v.OPENAI_API_KEY,
-        }
-        self.SYSTEM_PROMPT_INJECTION = ""
+        try: 
+            v = self.valves
+            if not v.OPENAI_API_KEY or not v.OPENAI_BASE_URL:
+                raise Exception("Error: OPENAI_API_KEY or OPENAI_BASE_URL is not set")
+            self.openai_kwargs = {
+                "base_url": v.OPENAI_BASE_URL,
+                "api_key": v.OPENAI_API_KEY,
+            }
+            self.SYSTEM_PROMPT_INJECTION = ""
+        except Exception as e:
+            traceback.print_exc()
 
     async def python_interpreter(self, uuid: str = "", code: str = ""):
         """
@@ -939,6 +955,7 @@ class Pipe:
     async def pipe(
         self,
         body: dict,
+        __request__: Request,
         __user__: dict | None,
         __task__: str | None,
         __tools__: dict[str, dict] | None,
@@ -1625,4 +1642,5 @@ class Pipe:
                 return
         except Exception as e:
             yield "Error: " + str(e)
+            traceback.print_exc()
             return

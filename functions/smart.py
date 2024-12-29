@@ -3,9 +3,9 @@ title: SMART - Sequential Multi-Agent Reasoning Technique
 author: MartianInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: SMART is a sequential multi-agent reasoning technique. 
-required_open_webui_version: 0.3.30
-requirements: langchain-openai==0.1.24, langgraph
-version: 1.0.6
+required_open_webui_version: 0.5.0
+requirements: langchain-openai==0.2.14, langgraph==0.2.60
+version: 1.1
 licence: MIT
 """
 
@@ -24,10 +24,17 @@ from typing import (
 )
 
 from pydantic import BaseModel, Field, create_model
-from openai import OpenAI
-from langchain_openai import ChatOpenAI
-from langchain_core.tools import StructuredTool
-from langgraph.prebuilt import create_react_agent
+
+try:
+    from langchain_openai import ChatOpenAI
+    from langchain_core.tools import StructuredTool
+    from langgraph.prebuilt import create_react_agent
+except Exception as e:
+    print("Failed to load langchain!")
+    print(f"Error: {e}, of type {type(e)}")
+    raise e
+    
+from fastapi import Request
 
 # ---------------------------------------------------------------
 
@@ -136,7 +143,6 @@ Carefully concider what the instructions mean and follow them EXACTLY."""
 
 EmitterType = Optional[Callable[[dict], Awaitable[None]]]
 
-
 class SendCitationType(Protocol):
     def __call__(self, url: str, title: str, content: str) -> Awaitable[None]: ...
 
@@ -230,6 +236,7 @@ class Pipe:
             **{k: os.getenv(k, v.default) for k, v in self.Valves.model_fields.items()}
         )
         print(f"{self.valves=}")
+        pass
 
     def pipes(self) -> list[dict[str, str]]:
         try:
@@ -248,10 +255,12 @@ class Pipe:
             "api_key": v.OPENAI_API_KEY,
         }
         self.SYSTEM_PROMPT_INJECTION = ""
+        pass
 
     async def pipe(
         self,
         body: dict,
+        __request__: Request,
         __user__: dict | None,
         __task__: str | None,
         __tools__: dict[str, dict] | None,
