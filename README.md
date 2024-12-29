@@ -15,8 +15,6 @@ This toolkit aims to provide developers with a versatile set of resources to bui
 
 NOTE: I would not recommend using the smart_with_tools.py code _as is_. It implements my own tools, many of which don't work without some external self-hosted APIs. However you can use it as a template to automatically implement your own tools.
 
-**!!! WARNING !!!**
-**DUE TO CHANGES IN OPENWEBUI THE SMART FUNCTION IS CURRENTLY BROKEN! Will fix as soon as there is a migration guide / documentation avalible.**
 ---
 
 The SMART (Sequential Multi-Agent Reasoning Technique) system is a powerful pipeline for enhanced language model capabilities. It includes:
