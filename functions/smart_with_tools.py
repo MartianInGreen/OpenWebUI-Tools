@@ -2,7 +2,7 @@
 title: SMART - Sequential Multi-Agent Reasoning Technique
 author: MartianInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
-description: SMART is a sequential multi-agent reasoning technique. 
+description: SMART is a sequential multi-agent reasoning technique. Now with tools.
 required_open_webui_version: 0.5.0
 requirements: langchain-openai==0.2.14, langgraph==0.2.60 aiohttp
 version: 1.1

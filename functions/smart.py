@@ -196,7 +196,7 @@ class Pipe:
             description="Model for small tasks",
         )
         LARGE_MODEL: str = Field(
-            default="openai/gpt-4o-2024-08-06", 
+            default="openai/gpt-4o", 
             description="Model for large tasks",
         )
         HUGE_MODEL: str = Field(
@@ -212,7 +212,7 @@ class Pipe:
             description="Online Model",
         )
         MINI_REASONING_MODEL: str = Field(
-            default="openai/gpt-4o-2024-08-06", 
+            default="openai/gpt-4o", 
             description="Reasoning for the -mini Model",
         )
         USE_GROQ_PLANNING_MODEL: str = Field(
