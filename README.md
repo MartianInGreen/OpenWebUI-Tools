@@ -73,4 +73,8 @@ Licensed under the MIT License.
 
 [MartainInGreen](https://github.com/MartianInGreen)
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=MartianInGreen/OpenWebUI-Tools&type=Date)](https://star-history.com/#MartianInGreen/OpenWebUI-Tools&Date)
+
 If you want to support me check my [GitHub Profile](https://github.com/MartianInGreen) for more info. [Buy Me a Coffee](https://rennersh.de/buy-me-a-coffee)
