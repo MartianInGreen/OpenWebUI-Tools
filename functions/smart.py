@@ -794,6 +794,7 @@ class Pipe:
                         status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_to_use_id}. Reasoning was used",
                         done=True,
                     )
+                yield ""
                 return
 
             else:
