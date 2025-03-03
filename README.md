@@ -6,6 +6,19 @@ The SMART system elevates the project by providing a sophisticated multi-agent a
 
 This toolkit aims to provide developers with a versatile set of resources to build more intelligent and capable web-based AI applications.
 
+## ReAct 
+
+---
+**Install instructions:**
+- Simply copy the `smart.py` code into a new function in OpenWebUI.
+- To create a new fuction go to `Workspaces -> Functions -> New Function (+ Icon)`
+
+NOTE: Some implemented tools need non avalible external APIs. 
+
+---
+
+The ReAct system is a pipeline for automatic model and tool selection as well as model tool calling. 
+
 ## SMART - Sequential Multi-Agent Reasoning Technique
 
 ---
