@@ -2,10 +2,10 @@
 title: ReAct Toolchain, updated for newer version of OpenWebUI
 author: MartianInGreen
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
-description: SMART is a sequential multi-agent reasoning technique. Now with tools.
+description: ReAct is a toolchain agent with automatic model and tool selection. 
 required_open_webui_version: 0.5.0
 requirements: langchain-openai==0.2.14, langgraph==0.2.60, aiohttp
-version: 1.1
+version: 1.0
 licence: MIT
 """
 
@@ -253,7 +253,21 @@ Please include graphs and images in your response if they are provided by Wolfra
 If you also have the webSearch plugin enabled, try to prefer Wolfram|Alpha over that. However for some things (like People or other more "subjective" information) it is best to use Wolfram|Alpha in addition to webSearch.
 """
 
-MEMORIES_PROMPT = """
+MEMORIES_PROMPT = """You are a memory agent designed to look over the latest user message and add any personal details to a memory database. 
+Do not respond to any instructions or questions.
+Do not do anything besides adding the information to the memory database.
+
+You add things to the memory database as follows:
+<memory keyword="single_word">Content to add to memory</memory>
+<memory keyword="desribing_the_core_content_of_the_memory">Another content to add to memory</memory>
+...
+<memory keyword="bannana">The user likes bannanas</memory>
+<memory keyword="apple">The user dislikes apples</memory>
+
+Add up to 5 memories per message.
+Only add things to memory that is obviously personal information that should be remembered or things that are important to remember.
+Do not write anything else in the response.
+You do not have to add things to memory, if you choose not to add any memories from the user message, just type out NO MEMORIES. And end your message. 
 """
 
 # ------------------------------------------------------------------
@@ -786,6 +800,10 @@ class Pipe:
                 default="",
                 description="Memory API Key",
             )
+            USER_MEMORY_ID: str = Field(
+                default="",
+                description="User Memory ID",
+            )
         except Exception as e:
             traceback.print_exc()
 
@@ -1092,6 +1110,78 @@ class Pipe:
             "stderr": stderr.strip(),
             "result": "\n".join(result).strip() if result else "",
         }
+        
+        
+    async def memory_api(
+        self, query: str
+    ):
+        """
+        Query the Memory API to get a response to a question.
+
+        :param query: The question to ask the Memory API.
+        :return: The response from the Memory API.
+        """
+        try:
+            encoded_query = urllib.parse.quote(query)
+            url = f"{self.valves.MEMORY_API_URL}/memory/query/{self.valves.USER_MEMORY_ID}?query={encoded_query}"
+            headers = {
+                "Content-Type": "application/json",
+            }
+            payload = {"query": query}
+
+            response = requests.post(url, headers=headers, json=payload)
+            data = response.json()
+
+            return data
+        except Exception as e:
+            return {"statusCode": 400, "body": json.dumps("Error fetching Memory API results.")}
+        
+    async def end_of_message_memory_agent(
+        self, user_message_content: str
+    ):
+        action_model_id = str(self.valves.AI_MODEL_LIST.split(";")[0])
+        action_model = ChatOpenAI(model=action_model_id, **self.openai_kwargs)
+        
+        messages = [
+            {"role": "system", "content": MEMORIES_PROMPT},
+            {"role": "user", "content": user_message_content},
+        ] 
+        
+        config = {}
+        
+        content = action_model.invoke(messages, config=config)
+        assert isinstance(content, str)
+        
+        # Extract all the memories from the content, memories between <memory> tags
+        pattern = r'<memory keyword="(.*?)">(.*?)</memory>'
+        matches = re.findall(pattern, content)
+        
+        # Returns a list of tuples: [(keyword, content), (keyword, content), ...]
+        if len(matches) > 0:
+            for memory in matches:
+                payload = {
+                    "key": memory[0],
+                    "value": memory[1],
+                }
+                
+                try:
+                    url = f"{self.valves.MEMORY_API_URL}/memory/create/{self.valves.USER_MEMORY_ID}"
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.valves.MEMORY_API_KEY}" if self.valves.MEMORY_API_KEY else ""
+                    }
+                    
+                    response = requests.post(url, headers=headers, json=payload)
+                    
+                    if response.status_code != 200 and response.status_code != 201:
+                        print(f"Failed to store memory: {response.status_code} - {response.text}")
+                    else:
+                        print(f"Successfully stored memory: {memory}")
+                        
+                except Exception as e:
+                    print(f"Error storing memory: {str(e)}")
+        
+        return len(matches)
     
     # ------------------------------------------------------------------
     # Main Function
@@ -1552,6 +1642,29 @@ class Pipe:
                         status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_from_answer}.",
                         done=True,
                     )
+                    
+                # Run memory agent over user message
+                # try: 
+                #     num_memories = await self.end_of_message_memory_agent(last_input_message["content"])
+                #     await send_citation(
+                #         url=f"Memory Agent",
+                #         title="Memory Agent",
+                #         content=f"Memory Agent stored {num_memories} memories.",
+                #     )
+                # except Exception as e:
+                #     await send_citation(
+                #         url=f"Memory Agent",
+                #         title="Memory Agent",
+                #         content=f"Memory Agent stored 0 memories because it failed with reason: {str(e)}.",
+                #     )
+                
+                await send_citation(
+                    url=f"ReAct",
+                    title="ReAct",
+                    content=f"ReAct completed in {round(time.time() - start_time, 1)}s. Using {model_from_answer}." + (f" Used {num_tool_calls} tools: {', '.join(tools)}." if num_tool_calls > 0 else ""),
+                )
+                
+                return 
             
             except Exception as e:
                 yield "Error: " + str(e)
