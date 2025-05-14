@@ -1,0 +1,21 @@
+version: '3'
+services:
+  api:
+    build:
+      context: ./ReAct/API
+    environment:
+      - APP_PORT=9020
+      - DEBUG=false
+      - API_KEY=some_key
+      - EXTERNAL_URL=https://api.some_url.com
+      - BRAVE_SEARCH_TOKEN=
+      - BRAVE_SEARCH_TOKEN_SECONDARY=
+      - WOLFRAMALPHA_APP_ID=
+      - OPENAI_API_KEY=
+      - FAL_AI_KEY=
+      - EXA_API_KEY=
+      - OPENROUTER_API_KEY=
+      - JUPYTER_URL=http://localhost:8888
+      - JUPYTER_TOKEN=
+    ports:
+      - "${APP_PORT:-8000}:8000"

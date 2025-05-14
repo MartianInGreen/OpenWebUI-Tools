@@ -5,7 +5,7 @@ author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 description: ReAct is a toolchain agent with automatic model and tool selection. 
 required_open_webui_version: 0.5.0
 requirements: langchain-openai==0.2.14, langgraph==0.2.60, aiohttp
-version: 1.0
+version: 2.0
 licence: MIT
 """
 
@@ -63,95 +63,69 @@ Variables:
 {{USER_PROMT}}: User prompt
 """
 
-PLANNING_PROMPT = """<system_instructions>
-You are a planning Agent. You are part of an agent chain designed to make LLMs more capable. 
-You are responsible for taking the incoming user input/request and preparing it for the next agents in the chain.
-You are designed to pick the model the user interacts with. 
-You are designed to pick the tools the model will have access to.
-Only use a Newline after each closing tag. Never after the opening tag or within the tags.
+# Agent Prompts
+AGENTS_LIST = [{"name": "image_gen", "description": "Image Generation agent that can generate new images or modify existing ones. Not suited for technical images."},
+               {"name": "video_gen", "description": "Video Generation agent that can generate videos based on text or an existing image."},
+               {"name": "data_analyst", "description": "Data Analysis agent that can analyze data and files, run python code, use Wolfram|Alpha and generate visualizations."},
+               {"name": "artifiact_creator", "description": "Agent that can write and display HTML/CSS/JS websites and applets directly to the user."},
+               {"name": "researcher", "description": "Research agent that can search for and summarize information from the web and academic sources."},
+               {"name": "coder", "description": "A coding agent that is specialized to write and debug code in various languages."},
+               {"name": "emotional", "description": "An agent that specializes in emotional support and deep human understanding."},
+               {"name": "reasoner", "description": "A very smart agent especially designed to deeply think about and reason through complex problems."},
+               {"name": "scientist", "description": "A scientist agent that is especially designed to think about and solve complex scientific, math, and engineering problems."}]
 
-Guidelines: 
-- Don't over or under estimate the difficulty of the task. If the user just wants to chat try to see that. 
-- Try to pick the best model for the task. 
-- Try to keep in mind what LLMs are good at and what they're not. 
-- Some seemingly simple tasks are hard for LLMs like you. Try to keep that in mind.
-- Try to pick more complex models for more complex tasks. 
-- If the user uses #online, #python, #wolfram, #image in their message use those tools. 
+AGENT_MODELS = [{"name": "image_gen", "model": "openai/gpt-4o"},
+                {"name": "video_gen", "model": "openai/gpt-4o"},
+                {"name": "data_analyst", "model": "openai/o3-mini"},
+                {"name": "artifiact_creator", "model": "anthropic/claude-3.7-sonnet"},
+                {"name": "researcher", "model": "google/gemini-2.0-flash"},
+                {"name": "coder", "model": "anthropic/claude-3.7-sonnet"},
+                {"name": "emotional", "model": "anthropic/claude-3.7-sonnet"},
+                {"name": "reasoner", "model": "openai/o3-mini"},
+                {"name": "scientist", "model": "openai/o3-mini"}]
 
-Avalible tools:
-- Avalible tools are #online, #python, #wolfram, #image-gen
-- Use #online to enable multiple tools such as Search and a Scraping tool. 
-- Use #wolfram to enable access to Wolfram|Alpha, a powerful computational knowledge engine and scientific and real-time database.
-    - Wolfram|Alpha has a very powerful computational knowledge engine that is especially good at hard math questions, e.g. complex intervals, finding the roots of polynomials, etc.
-    - It is also very good at real time data, such as weather, stock prices, currency rates, etc.
-    - It is also a very useful scientific database, e.g. finding facts about Planets, Elements, Countries, etc.
-    - If you include wolfram, it is best to also include either #python or #online, depending on which field the query falls in.
-- Use #python to enable access to a Python interpreter. This has internet access and can work with user files. Also useful for more complex plots and math.
-- Use #image-gen to enable access to a image generation tool using the latest generation in image generation models.
-- If the prompt involves math, enable at least #python or #wolfram.
-- If the user uses keywords like "latest" or "up to date" use an online tool or model. 
-- If the user uses keywords like "calculate" or "compute" enable python and/or wolfram. 
+AGENT_TOOLS = [{"name": "image_gen", "tools": ["image-gen"]},
+                {"name": "video_gen", "tools": ["video-gen"]},
+                {"name": "data_analyst", "tools": ["python", "wolfram"]},
+                {"name": "artifiact_creator", "tools": []},
+                {"name": "researcher", "tools": ["online", "wolfram"]},
+                {"name": "coder", "tools": []},
+                {"name": "emotional", "tools": []},
+                {"name": "reasoner", "tools": []},
+                {"name": "scientist", "tools": ["wolfram"]}]
 
-Avalible models:
-- "openai/gpt-4o-mini": A small and fast model. Good for basic chatting. (Price class: 1)
-- "openai/gpt-4o-2024-11-20": A large and powerful model. Good for complex tasks. Good for tool use and web search. (Price class: 2)
-- "anthropic/claude-3.7-sonnet": Model that is very good in general. Good emotional intelligence. Good at reasoning, math, science, and especially coding and tool use. Good at wep-page design. (Price class: 3)
-- "openai/o3-mini": A reasoning model. Good for tasks that require reasoning and planning as well as science, coding and math. Use only when user specifically requests for "reasoning". Can not use any tools. (Price class: 4)
-- "perplexity/sonar-reasoning": An online reasoning model with direct access to the internet (However can not search for images). Prefer this over the other models when the user request is basically a search query. Good for tasks where web search is the primary focus. (Price class: 2)
+AGENT_PROMPT_GENERAL = """<general_instructions>
+You should always respond with markdown formatting. Use code blocks for code with the appropriate language. 
+When output numbers, equasions, or math, always use latex formatting. For Latex always use the "Obsdian" style-syntax. So, always start a new line followed by $$, another new line and then the latex code which can go over multiple lines, and then end with another new line followed by $$ and another new line before you start writing again. For inline latex use a single $ before and after the latex code. There should be a space before the $ and after the $, but no spaces after the first $ and before the second $.
+Always use Markdown to link to images and other resources. To display images you can use the following format: ![Alt text](URL). For links, use the following format: [Link text](URL).
+You should only include images if you have gotten them from a reliable source. Do not make up image links.
+Always be friendly, approachable, and helpful in your responses. Always reaspond in the language the user is talking to you in. Only fallback to English if the language is unclear.
 
-You should respond by following these steps:
-1. Within <reasoning> tags, plan what you will write in the other tags. This has to be your first step.
-3. Within the <model> and <tools> tags, write out your final answer. Your answer should be a comma seperated list.
-
-Example response:
-<reasoning>
-... 
-(You are allowed new lines here)
-</reasoning>
-<model>openai/gpt-4o-2024-11-20</model>
-<tools>#online, #python</tools>
-
-Second Example response:
-<reasoning>
-... 
-</reasoning>
-<model>google/gemini-2.0-flash-001</model>
-<tools></tools> (Leave empty if no tools are needed)
-</system_instructions>
-"""
-
-REACT_SYSTEM_PROMPT = """<general_instructions>
-- Always respond in Markdown format. Use Code-blocks for code with the appropriate language. 
-- For latex always use $$\\n latex \\n$$ for block latex and $latex$ for inline latex.
-- For images, use the following format: ![Alt text](URL)
-- For links, use the following format: [Link text](URL)
-
+VISION_ENABLED: TRUE
 Current Date: {{DATE}}
 Current Time: {{TIME}}
 </general_instructions>
 
-<artefacts_instructions>
-You can create and show HTML/CSS/JS to the user by putting them inside a single HTML Markdown code block. The codeblock should be build like a .html file for a website. 
-You can embed links to content delivery networks (CDNs) for libraries and similar things. 
-Always make a short plan before starting to code.
-</artefacts_instructions>
+<tool_use_and_agent_calling>
+You can not directly use tools. However you can call other agents which can use tools or respond to the user in a more specialized way.
+
+To call another agent, you can use the following syntax inside the example_call codeblock:
+```example_call
+<agent_call agent="agent_name" direct_to_user="false/true" hand_back="false/true if direct_to_user is true">Instructions for the agent</agent_call>
+```
+Where the agent_name is the name of the agent you want to call and the Instructions for the agent is the instructions you want to give to the agent. If you set direct_to_user to true, the agent will respond directly to the user, otherwise the agent will respond to you. If you set direct_to_user to true, you can set hand_back to true or false, if it is set to true you will automatically be called again after the agent has responded to the user, if it is set to false you will not be called again after the agent has responded to the user unless the user sends the next message or the other agent calls you back.
+
+Avalible agents are:
+{{AGENTS}}
+</tool_use_and_agent_calling>
 
 <user_prompt>
 The following instructions have been provided to you by the user:
 {{USER_PROMT}}
 </user_prompt>
-
-<react_system_prompt>
-You are a ReAct agent. The user has given you access to the following tools:
-{{TOOLS}}
-</react_system_prompt>
-
-<tool_use_prompts>
-The following instructions have been provided to you for each of the tools:
-
-{{TOOL_USE_PROMPTS}}
-</tool_use_prompts>
 """
+
+# Tool Prompts
 
 WEB_SEARCH_PROMPT = """## Web Search
 YOU ALWATYS HAVE TO cite your sources with ([Source Name](Link to source)), including the outer (), at the end of each paragraph! All information you take from external sources has to be cited!
@@ -164,6 +138,26 @@ Feel free to use the scrape_web function to get more specific information from o
 - You can have multipel sources within the (), so ([S1](Link 1), [S2](Link 2)...) and so on.
 - Always cite at the end of a paragraph. Cite all sources refereced in the paragraph above. Do not cite within paragraphs. 
 </sources_guidelines>
+"""
+
+RESEARCH_PROMPT = """## Research
+You have access to a academic literature search tool. It provides you with papers, articles, and other academic resources.
+
+YOU ALWATYS HAVE TO cite your sources with ([Source Name](Link to source)), including the outer (), at the end of each paragraph! All information you take from external sources has to be cited!
+
+<sources_guidelines>
+- [Source Name] should be something like [2024, Doe et. all, Oxford] or [MIT Election Lab], just include as much detail as possible.
+- Always cite the specific source.
+- You can have multipel sources within the (), so ([S1](Link 1), [S2](Link 2)...) and so on.
+- Always cite at the end of a paragraph. Cite all sources refereced in the paragraph above. Do not cite within paragraphs. 
+</sources_guidelines>
+"""
+
+YOUTUBE_PROMPT = """## YouTube
+You can get the transcript of a YouTube video by using the "get_transcript" function.
+You can also get the video details by using the "get_video_details" function.
+
+Always provide a brief summary of the video content and the key takeaways.
 """
 
 PYTHON_PROMPT = """ ## Python Interpreter
@@ -180,10 +174,42 @@ PYTHON_PROMPT = """ ## Python Interpreter
 Uploaded Files: {{FILES}}
 """
 
-IMAGE_GENERATION_PROMPT = """ ## Image Generation
+WOLFRAM_ALPHA_PROMPT = """## Wolfram|Alpha
+Wolfram|Alpha is an advanced computational knowledge engine and database with accurate scientific and real-time data. 
+
+Wolfram|Alpha's queries should be kept simple. For example "plot of f(x)=3x^2 for x in [0,10]" is a good query. However advanced plotting should be done with python preferably. 
+Wolfram|Alpha has advanced math capabilites but is not good when a large number of computations is needed. It is best used math problems where only a few computations are needed. 
+- It can solve integrals, derivates, limits etc.
+- You should input math in either natural language or using latex, however try to keep it clean and understandable.
+
+Wolfam|Alpha also has a very good database:
+- It has information on population, countries, cities, production of goods, trade, people, etc.
+- It has information about planets, astronomical objects, elements, etc.
+- It has accurate real time weather data and predictions, stock prices, currency rates, etc.
+
+Wolfram|Alpha is not good for general knowledge or open ended questions. It will not understand them. 
+
+Please include graphs and images in your response if they are provided by Wolfram|Alpha.
+Always rewrite the Wolfram|Alpha style maths in latex when you include it in your response.
+
+If you also have the webSearch plugin enabled, try to prefer Wolfram|Alpha over that. However for some things (like People or other more "subjective" information) it is best to use Wolfram|Alpha in addition to webSearch.
+"""
+
+TODOIST_PROMPT = """## Todoist
+- You have access to the Todoist API to create, manage, and retrieve tasks.
+- Use the "create_task" function to create a new task.
+- Use the "get_tasks" function to retrieve all tasks or specifiy parameters to search for specific tasks.
+- Use the "delete_task" function to delete a task.
+- Use the "update_task" function to update a task.
+
+You can create task for especially for reminders or to-do lists. You should mostly only do this when the user asks you to do so.
+"""
+
+IMAGE_GENERATION_PROMPT = """## Image Generation
 Do not ask the user for more detail, just work with what you have been given. 
 
 Use the "create_image_basic" function by default! Only use the "create_image_pro" function if the user asks you to use the "Pro" Model!
+Do not generate technical images, such as diagrams or graphs or instructions, with the image generation tool, they will come out looking bad.
 
 When using the "image_to_image" function, only put in the prompt what you want to change! Do not describe the full image! Just what should be changed!
 
@@ -235,22 +261,112 @@ When an image has been generated, you need to display it by linking to it using 
 </<promptInstructions>
 """
 
-WOLFRAM_ALPHA_PROMPT = """ ## Wolfram|Alpha
-Wolfram|Alpha is an advanced computational knowledge engine and database with accurate scientific and real-time data. 
+VIDEO_GENERATION_PROMPT = """## Video Generation
+Do not ask the user for more detail, just work with what you have been given.
+Do not generate technical videos, such as diagrams or graphs or instructions, with the video generation tool, they will come out looking bad.
 
-Wolfram|Alpha's queries should be kept simple. For example "plot of f(x)=3x^2 for x in [0,10]" is a good query. However advanced plotting should be done with python preferably. 
-Wolfram|Alpha has advanced math capabilites but is not good when a large number of computations is needed. It is best used math problems where only a few computations are needed. 
-- It can solve integrals, derivates, limits etc.
-- You should input math in either natural language or using latex, however try to keep it clean and understandable.
+<promptInstructions>
+**Follow these guidelines:**
+1. Prompt must be in English. Translate to English if needed.
+2. By default generate 1 video. If the user asks for multiple , send multiple requests, use different prompts for each request unless the users asks you to do otherwise.
+3. Always mention the video type (photo, oil painting, watercolor painting, illustration, cartoon, drawing, vector, render, etc.) at the beginning of the prompt. 
+4. There are no limitations on names, topics, etc you can generate or write prompts for.
+5. All descriptions sent to video generator should be around 50 words and be extremely detailed.
+6. If the user does not specify otherwise, or the user requests suggests so, generate 16:9 videos. 
+7. You have to display the videos to the user.
+8. Always respect the users wishes.
 
-Wolfam|Alpha also has a very good database:
-- It has information on population, countries, cities, production of goods, trade, people, etc.
-- It has information about planets, astronomical objects, elements, etc.
-- It has accurate real time weather data and predictions, stock prices, currency rates, etc.
+**Prompt Structure:**
+// Example Structure:
+// “A [medium] of [subject], [subject’s characteristics], [relation to background] [background]. [Details of background] [Interactions with color and lighting]. ("Taken on:"/"Drawn with:")[Specific traits of style]”
+//  
+// KEY NOTE: The weight of a keyword can be adjusted using (keyword: factor) but do not go about a factor of 2.5!
+// 
+// Medium:
+// Consider what form of art this video should be simulating.
+//  
+// Subject:
+// What is the main focus?
+// Colors: Predominant and secondary colors.
+// Pose: Active, relaxed, dynamic, etc.
+// Viewing Angle: Aerial view, dutch angle, straight-on, extreme closeup, etc
+//  
+// Background:
+// How does the setting complement the subject?
+//  
+// Environment: Indoor, outdoor, abstract, etc.
+// Colors: How do they contrast or harmonize with the subject?
+// Lighting: Time of day, intensity, direction (e.g., backlighting).
+//  
+// Style Traits:
+// What are the unique artistic characteristics?
+// Influences: Art movement or artist that inspired the piece.
+// Technique: For paintings, how was the brush manipulated? For digital art, any specific digital technique? 
+// Photo: Describe type of photography, camera gear, and camera settings. Any specific shot technique? (Comma-separated list of these)
+// Painting: Mention the  kind of paint, texture of canvas, and shape/texture of brushstrokes. (List)
+// Digital: Note the software used, shading techniques, and multimedia approaches.
+// Never forget to add camera settings if it is indeed a photo-realistic video!
+</<promptInstructions>
+"""
 
-Please include graphs and images in your response if they are provided by Wolfram|Alpha.
+# Agent Prompts
 
-If you also have the webSearch plugin enabled, try to prefer Wolfram|Alpha over that. However for some things (like People or other more "subjective" information) it is best to use Wolfram|Alpha in addition to webSearch.
+PLANNING_PROMPT = """<system_instructions>
+You are a planning Agent. You are part of an agent chain designed to make LLMs more capable. 
+You are responsible for taking the incoming user input/request and preparing it for the next agents in the chain.
+You are designed to pick the model the user interacts with. 
+You are designed to pick the tools the model will have access to.
+Only use a Newline after each closing tag. Never after the opening tag or within the tags.
+
+Guidelines: 
+- Don't over or under estimate the difficulty of the task. If the user just wants to chat try to see that. 
+- Try to pick the best model for the task. 
+- Try to keep in mind what LLMs are good at and what they're not. 
+- Some seemingly simple tasks are hard for LLMs like you. Try to keep that in mind.
+- Try to pick more complex models for more complex tasks. 
+- If the user uses #online, #python, #wolfram, #image in their message use those tools. 
+- DO NOT ANSWER THE USER QUERY IN ANY WAY! That is not your job! Simply think about with model and tools are needed!
+
+Avalible tools:
+- Avalible tools are #online, #python, #wolfram, #image-gen
+- Use #online to enable multiple tools such as Search and a Scraping tool. 
+- Use #wolfram to enable access to Wolfram|Alpha, a powerful computational knowledge engine and scientific and real-time database.
+    - Wolfram|Alpha has a very powerful computational knowledge engine that is especially good at hard math questions, e.g. complex intervals, finding the roots of polynomials, etc.
+    - It is also very good at real time data, such as weather, stock prices, currency rates, etc.
+    - It is also a very useful scientific database, e.g. finding facts about Planets, Elements, Countries, etc.
+    - If you include wolfram, it is best to also include either #python or #online, depending on which field the query falls in.
+- Use #python to enable access to a Python interpreter. This has internet access and can work with user files. Also useful for more complex plots and math.
+- Use #image-gen to enable access to a image generation tool using the latest generation in image generation models. Doesn't need to be added when analyzing images, the LLMs can see on their own.
+- If the prompt involves math, enable at least #python or #wolfram.
+- If the user uses keywords like "latest" or "up to date" use an online tool or model. 
+- If the user uses keywords like "calculate" or "compute" enable python and/or wolfram. 
+
+Avalible models:
+- "small-model": A small and fast model. Good for basic chatting. (Price class: 1)
+- "medium-model": A large and powerful model. Good for complex tasks. Good for tool use. (Price class: 2)
+- "large-model": Model that is very good in general. Good emotional intelligence. Good at reasoning, math, science, and especially coding and tool use. Good at wep-page design. (Price class: 3)
+- "huge-reasoning-model": A reasoning model. Good for tasks that require reasoning and planning as well as science, coding and math. Use only when user specifically requests for "reasoning". Can not use any tools. (Price class: 4)
+- "online-model": An online reasoning model with direct access to the internet (However can not search for images). Prefer this over the other models when the user request is basically a search query. Good for tasks where web search is the primary focus. (Price class: 2)
+
+You should respond by following these steps:
+1. Within <reasoning> tags, plan what you will write in the other tags. This has to be your first step.
+3. Within the <model> and <tools> tags, write out your final answer. Your answer should be a comma seperated list.
+
+Example response:
+<reasoning>
+... 
+(You are allowed new lines here)
+</reasoning>
+<model>large-model</model>
+<tools>#online, #python</tools>
+
+Second Example response:
+<reasoning>
+... 
+</reasoning>
+<model>small-model</model>
+<tools></tools> (Leave empty if no tools are needed)
+</system_instructions>
 """
 
 MEMORIES_PROMPT = """You are a memory agent designed to look over the latest user message and add any personal details to a memory database. 
@@ -381,7 +497,12 @@ def remove_html_tags(text):
         str: Text with HTML tags removed.
     """
     clean = re.compile("<.*?>")
-    return re.sub(clean, "", text)
+    clean_text = re.sub(clean, "", text)
+    
+    clean_text = clean_text.replace("\\'", "'") 
+    clean_text = clean_text.replace("\\\\'", "'")
+    
+    return clean_text
 
 
 def decode_data(data):
@@ -758,10 +879,20 @@ class Pipe:
             OPENAI_API_KEY: str = Field(default="", description="Primary API key")
             MODEL_PREFIX: str = Field(default="react", description="Prefix before model ID")
             AI_MODEL_LIST: str = Field(
-                default="google/gemini-2.0-flash-001;openai/gpt-4o-mini;openai/gpt-4o-2024-11-20;anthropic/claude-3.7-sonnet;openai/o3-mini;perplexity/sonar-reasoning",
-                description="Semi-colon separated list of model IDs",
+                default="openai/gpt-4o-mini;openai/gpt-4o-mini;openai/gpt-4o-2024-11-20;anthropic/claude-3.7-sonnet;openai/o3-mini;perplexity/sonar-reasoning",
+                description="Semi-colon separated list of model IDs. Goes: Task Model, Small Model, Medium Model, Large Model, Reasoning Model, Online Model",
             )
-            AGENT_NAME: str = Field(default="ReAct", description="Name of the agent")
+            SECOND_AI_MODEL_LIST: str = Field(
+                default="openai/gpt-4o-mini;openai/gpt-4o-2024-11-20;perplexity/r1-1776;openai/o3-mini;openai/o3-mini-high;perplexity/sonar-reasoning-pro",
+                description="Semi-colon separated list of model IDs. Goes: Task Model, Small Model, Medium Model, Large Model, Reasoning Model, Online Model",
+            )
+            THIRD_AI_MODEL_LIST: str = Field(
+                default="google/gemini-2.0-flash-001;google/gemini-2.0-flash-001;deepseek/deepseek-v3;perplexity/r1-1776;anthropic/claude-3.7-sonnet:thinking;perplexity/sonar-reasoning",
+                description="Semi-colon separated list of model IDs. Goes: Task Model, Small Model, Medium Model, Large Model, Reasoning Model, Online Model",
+            )
+            FIRST_NAME: str = Field(default="ReAct", description="Name of the first ReAct Agent")
+            SECOND_NAME: str = Field(default="React - Smarty", description="Name of the second ReAct Agent")
+            THIRD_NAME: str = Field(default="ReAct - Alt", description="Name of the third ReAct Agent")
             AGENT_ID: str = Field(default="react", description="ID of the agent")
             BRAVE_SEARCH_KEY: str = Field(
                 default="",
@@ -771,11 +902,6 @@ class Pipe:
                 default="",
                 description="WolframAlpha App ID",
             )
-            IMAGE_GEN_URL: str = Field(
-                default="",
-                description="Base URL for the Image gen API.",
-            )
-            IMAGE_GEN_AUTH: str = Field(default="", description="Image gen API authentication")
             FAL_API_KEY: str = Field(
                 default="",
                 description="FAL API Key",
@@ -792,17 +918,13 @@ class Pipe:
                 default="",
                 description="Jupyter Notebook Token",
             )
-            MEMORY_API_URL: str = Field(
-                default="https://memory.example.de/api/v1",
-                description="Memory API URL",
+            REACT_API_URL: str = Field(
+                default="https://react.example.de",
+                description="ReAct API URL",
             )
-            MEMORY_API_KEY: str = Field(
+            REACT_API_TOKEN: str = Field(
                 default="",
-                description="Memory API Key",
-            )
-            USER_MEMORY_ID: str = Field(
-                default="",
-                description="User Memory ID",
+                description="ReAct API Token",
             )
         except Exception as e:
             traceback.print_exc()
@@ -823,8 +945,15 @@ class Pipe:
         except Exception as e:
             traceback.print_exc()
             return [{"id": "error", "name": f"Error: {e}"}]
-
-        return [{"id": self.valves.AGENT_ID, "name": self.valves.AGENT_NAME}]
+        
+        # Create the three ReAct agents from the valves
+        agent_list = [
+            {"id": self.valves.AGENT_ID + "1", "name": self.valves.FIRST_NAME},
+            {"id": self.valves.AGENT_ID + "2", "name": self.valves.SECOND_NAME},
+            {"id": self.valves.AGENT_ID + "3", "name": self.valves.THIRD_NAME},
+        ]
+            
+        return agent_list
 
     def setup(self):
         try: 
@@ -858,8 +987,7 @@ class Pipe:
         results = searchWeb(
             query, country, language, focus, self.valves.BRAVE_SEARCH_KEY
         )
-        print(results)
-        return json.dumps(results)
+        return results
 
     async def scrape_website(
         self, url: str
@@ -1079,7 +1207,7 @@ class Pipe:
                                         response = f"Error: {str(e)}"
                                     
                                     # Construct proper URL and append to result
-                                    result.append(f"Image: {response}\n")
+                                    result.append(f"![Image]({response})\n")
                                 elif "text/plain" in data:
                                     result.append(data["text/plain"])
 
@@ -1110,78 +1238,6 @@ class Pipe:
             "stderr": stderr.strip(),
             "result": "\n".join(result).strip() if result else "",
         }
-        
-        
-    async def memory_api(
-        self, query: str
-    ):
-        """
-        Query the Memory API to get a response to a question.
-
-        :param query: The question to ask the Memory API.
-        :return: The response from the Memory API.
-        """
-        try:
-            encoded_query = urllib.parse.quote(query)
-            url = f"{self.valves.MEMORY_API_URL}/memory/query/{self.valves.USER_MEMORY_ID}?query={encoded_query}"
-            headers = {
-                "Content-Type": "application/json",
-            }
-            payload = {"query": query}
-
-            response = requests.post(url, headers=headers, json=payload)
-            data = response.json()
-
-            return data
-        except Exception as e:
-            return {"statusCode": 400, "body": json.dumps("Error fetching Memory API results.")}
-        
-    async def end_of_message_memory_agent(
-        self, user_message_content: str
-    ):
-        action_model_id = str(self.valves.AI_MODEL_LIST.split(";")[0])
-        action_model = ChatOpenAI(model=action_model_id, **self.openai_kwargs)
-        
-        messages = [
-            {"role": "system", "content": MEMORIES_PROMPT},
-            {"role": "user", "content": user_message_content},
-        ] 
-        
-        config = {}
-        
-        content = action_model.invoke(messages, config=config)
-        assert isinstance(content, str)
-        
-        # Extract all the memories from the content, memories between <memory> tags
-        pattern = r'<memory keyword="(.*?)">(.*?)</memory>'
-        matches = re.findall(pattern, content)
-        
-        # Returns a list of tuples: [(keyword, content), (keyword, content), ...]
-        if len(matches) > 0:
-            for memory in matches:
-                payload = {
-                    "key": memory[0],
-                    "value": memory[1],
-                }
-                
-                try:
-                    url = f"{self.valves.MEMORY_API_URL}/memory/create/{self.valves.USER_MEMORY_ID}"
-                    headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {self.valves.MEMORY_API_KEY}" if self.valves.MEMORY_API_KEY else ""
-                    }
-                    
-                    response = requests.post(url, headers=headers, json=payload)
-                    
-                    if response.status_code != 200 and response.status_code != 201:
-                        print(f"Failed to store memory: {response.status_code} - {response.text}")
-                    else:
-                        print(f"Successfully stored memory: {memory}")
-                        
-                except Exception as e:
-                    print(f"Error storing memory: {str(e)}")
-        
-        return len(matches)
     
     # ------------------------------------------------------------------
     # Main Function
@@ -1204,7 +1260,18 @@ class Pipe:
             
                 self.setup()
                 
-                action_model_id = str(self.valves.AI_MODEL_LIST.split(";")[0])
+                called_model_id = body["model"]
+                
+                AI_MODEL_LIST = None
+                
+                if called_model_id == self.valves.MODEL_PREFIX + ".react1":
+                    AI_MODEL_LIST = self.valves.AI_MODEL_LIST
+                elif called_model_id == self.valves.MODEL_PREFIX + ".react2":
+                    AI_MODEL_LIST = self.valves.SECOND_AI_MODEL_LIST
+                elif called_model_id == self.valves.MODEL_PREFIX + ".react3":
+                    AI_MODEL_LIST = self.valves.THIRD_AI_MODEL_LIST
+                    
+                action_model_id = str(AI_MODEL_LIST.split(";")[0])
                 
                 action_model = ChatOpenAI(model=action_model_id, **self.openai_kwargs)
                 config = {}
@@ -1292,8 +1359,16 @@ class Pipe:
                 model_from_answer = re.findall(r"<model>(.*?)</model>", content)
                 model_from_answer = model_from_answer[0] if model_from_answer else None
                 
+                # Map model list to the actual models, with the model from AI_MODEL_LIST
+                model_map_list_from_answer = ["small-model", "medium-model", "large-model", "huge-reasoning-model", "online-model"]
+                
+                if model_from_answer not in model_map_list_from_answer:
+                    raise Exception("Invalid model selected")
+                else:
+                    model_from_answer = AI_MODEL_LIST.split(";")[model_map_list_from_answer.index(model_from_answer)+1]
+                
                 # Check if the model is valid
-                if model_from_answer not in self.valves.AI_MODEL_LIST.split(";"):
+                if model_from_answer not in AI_MODEL_LIST.split(";"):
                     raise Exception("Invalid model selected")
                 
                 # Check if the tools are valid
@@ -1303,9 +1378,6 @@ class Pipe:
                     for tool in tools:
                         if tool not in ["#online", "#python", "#wolfram", "#image-gen"]:
                             raise Exception("Invalid tool selected")
-                        
-                # Initiate the model
-                active_model = ChatOpenAI(model=model_from_answer, **self.openai_kwargs)
                 
                 await send_citation(
                     url=f"Planning",
@@ -1323,7 +1395,12 @@ class Pipe:
                 #
                 
                 # Check users last message for any of ["#online", "#python", "#wolfram", "#image-gen"] in last user message and apppend the tools list 
-                last_user_message = body["messages"][-1]["content"]
+                last_user_message_raw = body["messages"][-1]["content"]
+                
+                if isinstance(last_user_message_raw, list):
+                    last_user_message = last_user_message_raw[0]["text"]
+                else:
+                    last_user_message = last_user_message_raw
                 
                 if "#online" in last_user_message:
                     tools.append("#online")
@@ -1471,18 +1548,21 @@ class Pipe:
                 
                 # Look for #small, #medium, #large, #reason or #online-model in the last message
                 if "#small" in last_input_message["content"]:
-                    model_from_answer = self.valves.AI_MODEL_LIST.split(";")[1]
+                    model_from_answer = AI_MODEL_LIST.split(";")[1]
                 elif "#medium" in last_input_message["content"]:
-                    model_from_answer = self.valves.AI_MODEL_LIST.split(";")[2]
+                    model_from_answer = AI_MODEL_LIST.split(";")[2]
                 elif "#large" in last_input_message["content"]:
-                    model_from_answer = self.valves.AI_MODEL_LIST.split(";")[3]
+                    model_from_answer = AI_MODEL_LIST.split(";")[3]
                 elif "#reason" in last_input_message["content"]:
-                    model_from_answer = self.valves.AI_MODEL_LIST.split(";")[4]
+                    model_from_answer = AI_MODEL_LIST.split(";")[4]
                 elif "#online-model" in last_input_message["content"] or "#onlinemodel" in last_input_message["content"] or "#sonar" in last_input_message["content"]:
-                    model_from_answer = self.valves.AI_MODEL_LIST.split(";")[5]
+                    model_from_answer = AI_MODEL_LIST.split(";")[5]
                     
                 # Replace those words in the last message
-                last_input_message["content"] = last_input_message["content"].replace("#small", "").replace("#medium", "").replace("#large", "").replace("#reason", "").replace("#online-model", "")
+                if isinstance(last_input_message["content"], list):
+                    last_input_message["content"][0]["text"] = last_input_message["content"][0]["text"].replace("#small", "").replace("#medium", "").replace("#large", "").replace("#reason", "").replace("#online-model", "").replace("#sonar", "")
+                else:
+                    last_input_message["content"] = last_input_message["content"].replace("#small", "").replace("#medium", "").replace("#large", "").replace("#reason", "").replace("#online-model", "").replace("#sonar", "")
                 
                 # Remove first message from input messages such that only the messages after it remain
                 input_messages.pop(0)
@@ -1506,7 +1586,32 @@ class Pipe:
                      
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
                 
+                # Remove the <details> tag from all messages and add them to the messages list
                 for message in input_messages:
+                    if message["role"] == "system":
+                        if isinstance(message["content"], list):
+                            message_content = message["content"][0]["text"]
+                            
+                            # Use regex to match the <details> tags and everything in between and remove them from the text
+                            pattern = r"<details.*?>(.*?)</details>"
+                            match = re.search(pattern, message_content)
+                            
+                            if match:
+                                message_content = message_content.replace(match.group(0), "")
+                            
+                            message["content"][0]["text"] = message_content       
+                        else: 
+                            message_content = message["content"]
+                            
+                            # Use regex to match the <details> tags and everything in between and remove them from the text
+                            pattern = r"<details.*?>(.*?)</details>"
+                            match = re.search(pattern, message_content)
+                            
+                            if match:
+                                message_content = message_content.replace(match.group(0), "")
+                            
+                            message["content"] = message_content 
+                    
                     messages.append({"role": message["role"], "content": message["content"]})
                     
                 messages.append({"role": last_input_message["role"], "content": last_input_message["content"]})
@@ -1514,17 +1619,18 @@ class Pipe:
                 # 
                 # ReAct System
                 #
+
+                # Initiate the model
+                active_model = ChatOpenAI(model=model_from_answer, **self.openai_kwargs)
+
+                num_tool_calls = 0
+                tool_start_time = None
+                tool_end_time = None
                 
-                # Debug zields
-                #yield f"tools = {tools}\n"
-                #yield f"```json\n{json.dumps(messages, indent=2)}\n```\n\n"
-                #yield f"```json\n{to_use_tools=}\n```\n\n"
-                
-                if model_from_answer != "perplexity/sonar-reasoning" and model_from_answer != "openai/3o-mini":
+                if model_from_answer != str(AI_MODEL_LIST.split(";")[4]) and model_from_answer != str(AI_MODEL_LIST.split(";")[5]):
                     graph = create_react_agent(active_model, tools=to_use_tools)
                     inputs = {"messages": messages}
 
-                    num_tool_calls = 0
                     async for event in graph.astream_events(
                         inputs, version="v2", config=config
                     ):
@@ -1538,11 +1644,19 @@ class Pipe:
                                 yield content
                         elif kind == "on_tool_start":
                             yield "\n"
+                            
+                            tool_start_time = time.time()
+                            
                             await send_status(f"Running tool {event['name']}", False)
                         elif kind == "on_tool_end":
                             num_tool_calls += 1
                             
-                            # If tool is pyton print out python code in one code block and std_out and std_err in another
+                            try:
+                                tool_end_time = time.time()
+                                tool_duration = round(tool_end_time - tool_start_time, 1)
+                            except:
+                                tool_duration = 0
+                            
                             try: 
                                 if event["name"] == "python_code_execution":
                                     # Check if output is a string that needs parsing
@@ -1558,9 +1672,50 @@ class Pipe:
                                     result = output.get("result", "")
                                     
                                     # Yield results to user
-                                    yield f"\n```python\n{data['input']['code']}\n```\n"
-                                    yield f"```bash\nSTDOUT: {stdout}\nSTDERR: {stderr}\nRESULT: {result}\n```\n"
-                                    #yield f"```bash\n{output}\n```\n"
+                                    yield f"\n<details type=\"Code Execution\" done=\"true\" duration=\"{str(tool_duration)}\">" + f"\n<summary>Python ran for {str(tool_duration)}s</summary>" + f"\n```python\n{data['input']['code']}\n```\n" + f"### Stdtout\n{stdout}\n" + f"### Stderr\n{stderr}\n" + f"### Result\n{result}\n" + f"\n</details>\n"
+                                else:
+                                    output = str(data.get('output'))
+                                    try:
+                                        pattern = r"content='(\[{,1}\{.*?\}\]{,1})'"
+                                        match = re.search(pattern, output)
+                                        output_json = match.group(1)
+                                        
+                                        try:
+                                            output_json = json.loads(output_json)
+                                            output = json.dumps(output_json, indent=2)
+                                        except: 
+                                            try: 
+                                                output = json.dumps(json.loads(output_json.replace("\\\\", "\\")), indent=2)
+                                            except:
+                                                raise Exception("Error parsing JSON")
+                                        is_json = True
+                                    except Exception as e:
+                                        #yield str(e)
+                                        try:
+                                            pattern = r"content='(\[{,1}.*?\]{,1})'"
+                                            match = re.search(pattern, output)
+                                            output = match.group(1)
+                                        except:
+                                            pass
+                                        try:
+                                            pattern = r"content=\[{,1}'(.*?)'\]{,1}"
+                                            match = re.search(pattern, output)
+                                            output = match.group(1)
+                                        except:
+                                            pass
+                                        is_json = False
+                                        
+                                    
+                                    event_name = event["name"]
+                                    yield f"\n<details type=\"Tool {event_name}\" done=\"true\" duration=\"{str(tool_duration)}\">"
+                                    yield f"\n<summary>{event_name} ran for {str(tool_duration)}s</summary>\n"
+                                    
+                                    if is_json:
+                                        yield f"\n```json\n{output}\n```\n"
+                                    else:
+                                        yield output
+                                        
+                                    yield f"\n</details>\n"
                             except: 
                                 pass 
                                 
@@ -1579,7 +1734,7 @@ class Pipe:
                                     (f" Used {num_tool_calls} tools: {', '.join(tools)}." if num_tool_calls > 0 else ""),
                         done=True,
                     )
-                elif model_from_answer == "perplexity/sonar-reasoning":
+                elif model_from_answer == str(AI_MODEL_LIST.split(";")[5]):
                     # Create a streaming OpenAI model with the Sonar reasoning model
                     client = OpenAI(
                         base_url=self.valves.OPENAI_BASE_URL,
@@ -1587,7 +1742,7 @@ class Pipe:
                     )
 
                     completion = client.chat.completions.create(
-                        model="perplexity/sonar-reasoning",
+                        model=str(AI_MODEL_LIST.split(";")[5]),
                         messages=messages,
                         stream=True,
                         tools=None,
@@ -1608,11 +1763,17 @@ class Pipe:
                                     # Citation is a string url, see if it is alreay in the list, otherwise add it
                                     if citation not in citations:
                                         citations.append(citation)
+                                        
+                                        await send_citation(
+                                            url=citation,
+                                            title=len(citation)+1,
+                                            content=citation,
+                                        )
                         except Exception as e:
                             pass
                         
                     # After streaming is complete, yield the citations as formatted HTML
-                    if citations:
+                    if False:
                         yield "\n\n### Sources\n"
                         for i, citation in enumerate(citations):
                             formatted_citation = f"[{i+1}] [{citation}]({citation})"
@@ -1621,14 +1782,14 @@ class Pipe:
                         status_message=f"Done! Took: {round(time.time() - start_time, 1)}s. Used {model_from_answer}.",
                         done=True,
                     )
-                elif model_from_answer == "openai/3o-mini":
+                elif model_from_answer == str(AI_MODEL_LIST.split(";")[4]):
                     client = OpenAI(
                         base_url=self.valves.OPENAI_BASE_URL,
                         api_key=self.valves.OPENAI_API_KEY,
                     )
 
                     completion = client.chat.completions.create(
-                        model="openai/3o-mini",
+                        model=str(AI_MODEL_LIST.split(";")[4]),
                         messages=messages,
                         stream=True,
                         tools=None,

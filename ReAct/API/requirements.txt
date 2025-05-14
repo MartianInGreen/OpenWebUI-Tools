@@ -1,0 +1,7 @@
+fastapi
+chromadb
+sqlite3
+aiohttp
+dotenv
+exa-py
+openai
