@@ -63,7 +63,7 @@ SMART enhances the problem-solving capabilities of language models by breaking d
 ### 4. YouTube Tool (youtube.py)
 - Retrieves information about YouTube videos, including metadata and transcriptions. Supports multiple languages for video transcripts.
 - Searches YouTube by keyword (1–50 results), returning for each video its id and metadata.
-- Uses Youtube API v3 and needs a free api key from Google Cloud. https://developers.google.com/youtube/v3/getting-started
+- Uses YouTube API v3 and needs a free api key from Google Cloud. https://developers.google.com/youtube/v3/getting-started
 
 **Installation**
 
