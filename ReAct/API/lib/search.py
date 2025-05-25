@@ -3,6 +3,27 @@
 from exa_py import Exa
 import os
 from openai import OpenAI
+import pathlib
+import json
+import urllib.parse
+
+def get_iframe_content(data):
+    iframe_path = pathlib.Path(__file__).parent / "iframes" / "search.html"
+    with open(iframe_path, 'r') as f:
+        content = f.read()
+        
+    # Convert data to JSON string and escape it for JavaScript
+    data_json = json.dumps(data).replace('</', '<\\/')
+    
+    # Insert the data into the HTML content
+    content = content.replace('<!-- Results will be populated here -->', 
+                            f'<script>displayResults({data_json});</script>')
+    return content
+
+def create_iframe_url(data):
+    # Encode the data as a URL parameter
+    encoded_data = urllib.parse.quote(json.dumps(data))
+    return f"search.html?data={encoded_data}"
 
 def serach_exa(query: str, results_category: str, publish_date: list[str]):
     exa = Exa(api_key = os.getenv("EXA_API_KEY"))
@@ -20,13 +41,26 @@ def serach_exa(query: str, results_category: str, publish_date: list[str]):
         
         
     result = exa.search_and_contents(query, **params)
-
-    return {"success": True, "data": result, "iframe": False}   
+    data = {"success": True, "data": result, "iframe": True}
+    
+    return {
+        "success": True, 
+        "data": result, 
+        "iframe": True,
+        "iframe_content": get_iframe_content(data)
+    }   
 
 def crawl_exa(url: str):
     exa = Exa(api_key = os.getenv("EXA_API_KEY"))
     result = exa.get_contents([url], text = True)
-    return {"success": True, "data": result, "iframe": False}   
+    data = {"success": True, "data": result, "iframe": True}
+    
+    return {
+        "success": True, 
+        "data": result, 
+        "iframe": True,
+        "iframe_content": get_iframe_content(data)
+    }   
 
 def serach_brave(query):
     pass 
@@ -63,7 +97,11 @@ def serach_perplexity(query: str, type: str):
         ]
     )
     
-    return {"success": True, "data": completion.choices[0].message.content, "iframe": False}
+    return {
+        "success": True, 
+        "data": completion.choices[0].message.content, 
+        "iframe": False
+    }
             
         
         

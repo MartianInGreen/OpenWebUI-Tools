@@ -114,7 +114,7 @@ async def python_code_execution(code: str):
     
     # Construct API URLs with authentication token if provided
     params = f"?token={os.getenv("JUPYTER_TOKEN")}" if os.getenv("JUPYTER_TOKEN") else ""
-    kernel_url = urljoin(jupyter_url, f"/api/kernels{params}")
+    kernel_url = urljoin(os.getenv("JUPYTER_URL"), f"/api/kernels{params}")
 
     try:
         response = session.post(
@@ -124,7 +124,7 @@ async def python_code_execution(code: str):
         kernel_id = response.json()["id"]
 
         websocket_url = urljoin(
-            jupyter_url.replace("http", "ws"),
+            os.getenv("JUPYTER_URL").replace("http", "ws"),
             f"/api/kernels/{kernel_id}/channels{params}",
         )
 
@@ -179,7 +179,7 @@ async def python_code_execution(code: str):
                                 image_name = f"{uuid.uuid4().hex}.png"
                                 try:
                                     response = jupyter_upload(
-                                        os.getenv("JUPYTER_URL_BASE"),
+                                        os.getenv("JUPYTER_URL"),
                                         os.getenv("JUPYTER_TOKEN"),
                                         "base64",
                                         data["image/png"],
