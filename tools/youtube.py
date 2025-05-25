@@ -1,6 +1,6 @@
 """
 title: YouTube Utility Tools
-author: MartainInGreen
+author: MartainInGreen, Firkin-gadabout
 author_url: https://github.com/MartianInGreen/OpenWebUI-Tools
 version: 0.2.0
 requirements: youtube_transcript_api, google-api-python-client, pydantic
